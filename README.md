@@ -46,28 +46,36 @@ DSH_HARNESS=/path/to/deepseek-harness ./install.sh
 
 The bootstrap never reads stdin — piped to `sh`, stdin *is* the script — so every option is an environment variable: `DSH_HARNESS`, `DSH_BUILD`, `DSH_REPO`, `DSH_REF`, `DSH_PREFIX`.
 
-Then point the harness at your model. In `~/.dsh/settings.yaml`:
+Then point the harness at your models. Copy [`settings.example.yaml`](settings.example.yaml) to `~/.dsh/settings.yaml` and edit it:
 
-```yaml
-llm-pi-ai:
-  providers:
-    local:
-      displayName: local
-      api: openai-completions
-      baseURL: http://127.0.0.1:8080/v1
-      apiKeyEnv: LOCAL_API_KEY      # may be unset for a local server
-      models:
-        - id: your-model-id          # must match what your server reports
-          name: Your Model
-          contextWindow: 131072      # match your server's -c exactly
-          maxTokens: 32768
-
-agent-default-model:
-  provider: local
-  model: your-model-id
+```sh
+cp settings.example.yaml ~/.dsh/settings.yaml
 ```
 
+It configures three providers side by side — a local server, OpenRouter, and z.ai's GLM coding plan — all reachable from `/model` at runtime. **No key is ever written into that file**: `apiKeyEnv` names an environment variable and the harness reads the value from your environment, so export them from your shell profile instead.
+
+Keeping a local model as `agent-default-model` means nothing leaves your machine unless you pick a hosted model deliberately.
+
 Edit `~/.dsh/profiles/tui/cordis.patch.yml` (the installer copies a template), then run `dsh-tui`.
+
+## Providers
+
+| provider | base URL | key |
+|---|---|---|
+| local | `http://127.0.0.1:8080/v1` | usually none |
+| OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+| z.ai coding plan | `https://api.z.ai/api/coding/paas/v4` | `GLM_API_KEY` |
+
+**z.ai: mind the base URL.** The coding plan is a subscription served from `/api/coding/paas/v4`. The standard pay-as-you-go path `/api/paas/v4` takes the same key and the same model ids but answers `error 1113 "Insufficient balance or no resource package"` unless you hold PAYG credit. Both paths serve `/models` successfully, so the model list looks healthy while completions fail — **if a valid key returns a balance error, suspect the URL before the subscription.**
+
+**GLM models are reasoning models.** A small `maxTokens` can be spent entirely on deliberation and come back with empty content and non-zero `reasoning_tokens`. That is not a failure; give them room.
+
+**OpenRouter ids change.** Read them from the catalogue rather than guessing — plausible-looking ids often do not exist:
+
+```sh
+curl -s https://openrouter.ai/api/v1/models \
+  -H "Authorization: Bearer $OPENROUTER_API_KEY" | jq -r '.data[].id'
+```
 
 ## Notes worth knowing
 

@@ -1,0 +1,96 @@
+# ~/.dsh/settings.yaml — example
+#
+# Copy to ~/.dsh/settings.yaml and edit. This file NEVER contains a key:
+# `apiKeyEnv` names an environment variable, and the harness reads the value
+# from your environment at run time. Export them from your shell profile:
+#
+#   export OPENROUTER_API_KEY=...
+#   export GLM_API_KEY=...
+
+llm-pi-ai:
+  providers:
+
+    # ── a local OpenAI-compatible server ────────────────────────────────────
+    # llama.cpp's llama-server, llama-swap, vLLM, ollama — anything speaking
+    # /v1/chat/completions. Many local servers ignore the key entirely; the
+    # variable can be unset.
+    local:
+      displayName: local
+      apiKeyEnv: LOCAL_API_KEY
+      api: openai-completions
+      baseURL: http://127.0.0.1:8080/v1
+      # A local server that holds one model and serves one request at a time
+      # can stall on a slow first load, so allow a generous idle window.
+      streamIdleTimeoutMs: 1200000
+      models:
+        # id MUST match what your server reports (`curl localhost:8080/v1/models`).
+        # contextWindow MUST match the server's real `-c`: it is what the
+        # compaction threshold is a percentage of, so setting it higher than
+        # the server's limit lets the server truncate before dsh ever compacts.
+        - id: your-local-model
+          name: Local model
+          contextWindow: 131072
+          maxTokens: 32768
+          # Add `input: [ text, image ]` only if the server has a vision projector.
+
+    # ── OpenRouter ──────────────────────────────────────────────────────────
+    # Hundreds of hosted models behind one key. Model ids change, so read them
+    # from the catalogue rather than guessing — several plausible-looking ids
+    # simply do not exist:
+    #   curl -s https://openrouter.ai/api/v1/models \
+    #     -H "Authorization: Bearer $OPENROUTER_API_KEY" | jq -r '.data[].id'
+    openrouter:
+      displayName: OpenRouter
+      apiKeyEnv: OPENROUTER_API_KEY
+      api: openai-completions
+      baseURL: https://openrouter.ai/api/v1
+      models:
+        - id: anthropic/claude-sonnet-5
+          name: Claude Sonnet 5 (OR)
+          contextWindow: 1000000
+          maxTokens: 32768
+          input: [ text, image ]
+        - id: deepseek/deepseek-v4-flash-0731
+          name: DeepSeek V4 Flash (OR, cheap)
+          contextWindow: 1310720
+          maxTokens: 32768
+
+    # ── z.ai (GLM coding plan) ──────────────────────────────────────────────
+    # NOTE THE BASE URL. The coding plan is a subscription served from
+    # /api/coding/paas/v4. The standard pay-as-you-go path /api/paas/v4 uses
+    # the SAME key and the SAME model ids, but answers
+    #   error 1113 "Insufficient balance or no resource package"
+    # unless you have PAYG credit. Both paths serve /models successfully, so
+    # the model list looks healthy while completions fail — if a valid key
+    # returns a balance error, suspect the URL before the subscription.
+    zai:
+      displayName: z.ai (GLM coding plan)
+      apiKeyEnv: GLM_API_KEY
+      api: openai-completions
+      baseURL: https://api.z.ai/api/coding/paas/v4
+      models:
+        # GLM are reasoning models: a small maxTokens can be spent entirely on
+        # deliberation and return EMPTY content with non-zero reasoning_tokens.
+        # That is not a failure — give them room.
+        #
+        # contextWindow here is deliberately conservative; z.ai's /models does
+        # not report a limit. Raise per-model once verified against their docs.
+        - id: glm-5.3
+          name: GLM-5.3 (z.ai)
+          contextWindow: 131072
+          maxTokens: 32768
+        - id: glm-4.6
+          name: GLM-4.6 (z.ai)
+          contextWindow: 131072
+          maxTokens: 32768
+        - id: glm-4.5-air
+          name: GLM-4.5 Air (z.ai, light)
+          contextWindow: 131072
+          maxTokens: 32768
+
+# Which model a new session starts on. Everything else is reachable from
+# /model at any time; keeping a local model here means no request leaves the
+# machine unless you choose it.
+agent-default-model:
+  provider: local
+  model: your-local-model
