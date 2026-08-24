@@ -66,8 +66,12 @@ export function reviewPrompt(userText, assistantText, capBytes = 4096) {
     + 'Identify DURABLE lessons only: verified facts about the user or their machines worth keeping across sessions, '
     + 'mistakes now understood, or procedures worth repeating. For each, call memory_save (one topic, one self-contained '
     + 'summary), skill_create for a procedure worth teaching, or tool_create for a command worth becoming a permanent '
-    + 'typed tool. Do NOT save ephemeral state, secrets, or anything obvious from context. '
-    + 'If there is nothing durable, reply exactly: nothing to keep\n\n'
+    + 'typed tool. Do NOT save ephemeral state, secrets, or anything obvious from context.\n'
+    + 'Also DEEPEN YOUR MODEL OF THE USER: if this exchange revealed something durable about WHO THEY ARE — '
+    + 'expertise, preferences, working style, environment, or current projects — call user_model(get), fold the '
+    + 'new observation into the current model (correcting anything now known to be wrong), and write it back with '
+    + 'user_model(set). Revise, do not merely append; keep it concise; record only what you actually observed.\n'
+    + 'If there is nothing durable and nothing new about the user, reply exactly: nothing to keep\n\n'
     + `USER:\n${clip(userText)}\n\nASSISTANT:\n${clip(assistantText)}`
 }
 

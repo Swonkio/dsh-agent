@@ -11,7 +11,7 @@
 - id: compaction-basic
   config:
     thresholdRatio: 0.8
-    maxTokens: 2048
+    maxTokens: 24576
 
 - id: tool-result-pruner
   config:
@@ -62,18 +62,26 @@
       name: 'dsh-memory'
       config:
         filename: QWEN.md
-        indexCapBytes: 4096
+        indexCapBytes: 8192
         nudgeAfterMs: 21600000
 
     - id: dsh-cron
       name: 'dsh-cron'
       config:
-        defaultProvider: zai
-        defaultModel: glm-5.3
+        defaultProvider: local
+        defaultModel: qwen3.8-27b-uncensored
         jobTimeoutMs: 600000
 
     - id: dsh-soul
       name: 'dsh-soul'
+      config:
+        maxBytes: 2048
+
+    # The review runs under this profile and updates the user model, so the
+    # tool must be mounted here. No background hook in this profile — the review
+    # reviewing itself would recurse.
+    - id: dsh-user-model
+      name: 'dsh-user-model'
       config:
         maxBytes: 2048
 

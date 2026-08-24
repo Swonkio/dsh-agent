@@ -17,7 +17,8 @@ It is **not a Raspberry Pi project** — it was first built on one, but everythi
 | **dsh-agent** | the interactive terminal surface — transcript, composer, live HUD, ASCII animations, `/model` switching |
 | **dsh-memory** | durable cross-session memory (`memory_save`/`_search`/`_edit`/`_forget`), a QWEN.md project-memory tool, full-text recall of past *conversations*, and opt-in **background self-review** that saves lessons after a turn |
 | **dsh-cron** | schedule agent turns (`cronjob` tool + a per-minute scheduler run from crontab); jobs can post results to Telegram |
-| **dsh-soul** | a `SOUL.md` persona injected into every session |
+| **dsh-soul** | a `SOUL.md` persona injected into every session — who the *agent* is |
+| **dsh-user-model** | a self-revising `USER.md` — who the *user* is: expertise, preferences, working style, environment, projects. Injected into every session and **maintained by the background review**, so the agent starts each conversation already knowing you |
 | **dsh-telegram** | a Telegram gateway — chat with the agent, send images (vision) and voice notes (local transcription) |
 | **dsh-agent-tools** | the agent's own **tool factory**: `tool_create`/`tool_forget` register new schema-carrying tools from data definitions in `~/.dsh/tools`, security-scanned, never model-authored code |
 | **dsh-web-readable** | article extraction before markdown — a page that would cost ~21k tokens of chrome comes back ~4k, content intact |
@@ -103,6 +104,13 @@ dsh-agent                         # first run shows the setup page
 ## Self-learning
 
 After a turn completes, `dsh-memory` can fire a **detached background review** (throttled to one per few minutes) that reads the exchange and saves durable lessons to memory on its own — no extra model call per message. It runs under the `cron` profile, where self-review is off, so it never recurses. The review model is configurable (`reviewProvider`/`reviewModel`); here it runs on the **local** model, so self-learning costs nothing and leaks nothing.
+
+The review does two things with what it reads:
+
+- **Durable lessons** → `memory_save` / `skill_create` / `tool_create` (facts, procedures, and command-shaped tools worth keeping).
+- **A deepening model of *you*** → it reads the current `USER.md` with `user_model`, folds in anything new the exchange revealed about your expertise, preferences, working style, environment, or projects, and **revises it in place** (dialectic, not append-only — a new observation corrects an old belief). That model is injected into every future session, so the agent behaves like a colleague on day two rather than day one.
+
+This is the same shape as [Nous Research's Hermes Agent](https://github.com/nousresearch/hermes-agent) 'closed learning loop' — agent-curated memory, periodic nudges, FTS5 cross-session recall, autonomous skill creation, and a deepening user model — built here on a local model so the whole loop stays on your machine.
 
 ## Scheduling
 

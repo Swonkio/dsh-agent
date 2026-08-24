@@ -41,7 +41,7 @@ ln -sfn ~/.dsh/profiles/node_modules/commander ~/dsh-kit/node_modules/commander
 ln -sfn ~/.dsh/profiles/node_modules/diff ~/dsh-kit/node_modules/diff
 
 # 3. out-of-tree plugin links into the harness's flat fallback
-for p in dsh-memory dsh-cron dsh-soul dsh-telegram dsh-agent-tools; do
+for p in dsh-memory dsh-cron dsh-soul dsh-user-model dsh-telegram dsh-agent-tools; do
   ln -sfn ~/dsh-kit/packages/$p ~/.dsh/profiles/node_modules/$p
 done
 ln -sfn ~/deepseek-harness/packages/session-query/tool-session-query \

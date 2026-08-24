@@ -115,6 +115,14 @@
       config:
         maxBytes: 2048
 
+    # A self-revising model of the USER (USER.md), the counterpart to the soul:
+    # who the person is, maintained by the agent across sessions and injected
+    # into every one. The background review below keeps it current.
+    - id: dsh-user-model
+      name: 'dsh-user-model'
+      config:
+        maxBytes: 2048
+
     # The agent's own tool factory: definitions in ~/.dsh/tools register as
     # real schema-carrying tools at boot (tool_create/tool_forget manage
     # them). Definitions are data — quoting-escaped params, key-scrubbed
