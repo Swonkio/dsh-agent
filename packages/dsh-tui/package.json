@@ -1,0 +1,29 @@
+{
+  "name": "dsh-tui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dsh-tui: an interactive terminal surface for DeepSeek Harness — a Claude Code-style CLI over the dsh-base plugin roster",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./startup": "./lib/startup.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-agent-default-model": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-session": "*",
+    "commander": "*"
+  }
+}
