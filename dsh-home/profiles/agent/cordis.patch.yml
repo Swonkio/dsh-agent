@@ -1,0 +1,134 @@
+# dsh-agent profile patch — TEMPLATE
+#
+# Copy to ~/.dsh/profiles/agent/cordis.patch.yml and edit the marked lines.
+# Everything here is applied on top of the base bundle.
+
+# The LLM session titler makes a second model request right after the first
+# prompt. A local server that holds one model and serves one request at a time
+# queues that request AHEAD of the turn you are waiting on. Remove this row if
+# your backend has spare capacity.
+- id: session-title-llm
+  disabled: true
+
+# Auto-compaction fires at 80% of the routed model's context window.
+# Do not lower it far: compaction REWRITES the prompt prefix and so invalidates
+# the KV cache, which on a warm session serves the large majority of input
+# tokens. Firing it more often trades a cheap large prefix for repeated full
+# re-prefills.
+- id: compaction-basic
+  config:
+    thresholdRatio: 0.8
+    # Sized for the 8192-token Ollama window: input + output must fit, so the
+    # summary cap can't exceed the window. Small, but compaction fails closed
+    # if the summary is cut mid-write, so it still gets most of the room.
+    maxTokens: 2048
+
+# Tool results are trimmed only when genuinely large. Measured over 313 real
+# results: p50 was 349 chars and p99 was 45,767 — the mass is a handful of huge
+# outputs, not many medium ones, so cutting earlier would lose information the
+# agent needs while saving little.
+- id: tool-result-pruner
+  config:
+    thresholdChars: 5000
+    headChars: 3072
+    tailChars: 768
+
+# ── web ─────────────────────────────────────────────────────────────────────
+- id: web
+  config:
+    # No search backend on this box: SearXNG absent and no DEEPSEEK_API_KEY for
+    # the bundled search. Re-add searchProvider (searxng) plus the
+    # web-search-searxng insert below if one is ever stood up. Direct fetch
+    # works fine without any of that.
+    fetchProvider: readable
+
+- insert:
+    - id: web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+
+    # Article extraction before markdown conversion. The shipped provider
+    # returns the whole document and the consumer converts ALL of it, chrome
+    # included — one Wikipedia article measured ~21k tokens whose first eight
+    # lines were "Jump to content", "Main menu" and similar. This brings the
+    # same page back at ~4k tokens with headings, lists and links intact, and
+    # passes link-index pages through untouched.
+    - id: web-fetch-readable
+      name: 'dsh-web-readable'
+
+# A fetch tool lets the MODEL choose the request target, which is an SSRF
+# surface. Enabling it is a considered trade for an agent that reads docs.
+- id: tool-web
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
+
+# ── project memory ──────────────────────────────────────────────────────────
+- id: agent-instructions
+  config:
+    maxBytes: 65536
+    instructionFileCandidates: [ AGENTS.md, CLAUDE.md, QWEN.md ]
+
+# ── cross-session recall ─────────────────────────────────────────────────────
+# The base mounts the FTS5 index dormant (`openAt: never`, in-memory). A
+# durable index opened on first search gives the agent memory of past
+# CONVERSATIONS, not just curated facts: `session_search` reaches what was
+# actually figured out before. The index file is derived data (rebuilt from
+# the sessions root) and stays out of the snapshot.
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-query.sqlite')
+    openAt: first-search
+
+- insert:
+    - id: tool-session-query
+      name: '@deepseek-ai/dsh-tool-session-query'
+
+- insert:
+    - id: tool-remember
+      name: 'dsh-memory'
+      config:
+        filename: QWEN.md
+        # The agent profile rides the 8k local model by default; the memory
+        # index must leave room for tools schema in that window.
+        indexCapBytes: 2048
+        nudgeAfterMs: 21600000
+        # Opt-in self-learning: after a completed turn, a detached glm-5.3
+        # pass saves durable lessons to memory by itself (throttled to one
+        # review per 10 minutes). The cron profile leaves this unset on
+        # purpose — reviewing reviews would recurse.
+        backgroundReview: true
+
+    - id: dsh-cron
+      name: 'dsh-cron'
+      config:
+        defaultProvider: zai
+        defaultModel: glm-5.3
+        jobTimeoutMs: 600000
+
+    - id: dsh-soul
+      name: 'dsh-soul'
+      config:
+        maxBytes: 2048
+
+    # The agent's own tool factory: definitions in ~/.dsh/tools register as
+    # real schema-carrying tools at boot (tool_create/tool_forget manage
+    # them). Definitions are data — quoting-escaped params, key-scrubbed
+    # child env, security-scanned — never model-authored code.
+    - id: agent-tools
+      name: 'dsh-agent-tools'
+
+# ── OPTIONAL: drive a VirtualBox VM ─────────────────────────────────────────
+# Delete this whole block unless you actually have VMs. It needs VBoxManage on
+# PATH, each VM's VRDE/VNC enabled, and `--mouse usbtablet` (a relative ps2
+# mouse ignores the absolute coordinates VNC sends). `find` needs tesseract-ocr.
+#
+# - insert:
+#     - id: tool-computer-use
+#       name: 'dsh-computer-use'
+#       config:
+#         settleMs: 700
+#         defaultVm: YOUR_VM_NAME
+#         vms:
+#           YOUR_VM_NAME:
+#             vncPort: 5900
+#             vncPasswordFile: /path/to/your/vnc-password

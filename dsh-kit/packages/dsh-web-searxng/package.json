@@ -1,0 +1,11 @@
+{
+  "name": "dsh-web-searxng",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A SearXNG WebSearchProvider for the dsh web capability seam: free, keyless, local.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT",
+  "peerDependencies": { "@deepseek-ai/cordis": "*", "@deepseek-ai/dsh-web": "*" }
+}

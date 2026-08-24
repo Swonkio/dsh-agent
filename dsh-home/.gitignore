@@ -1,0 +1,23 @@
+# Secrets never enter history. env.sh holds the API key; .credentials.yaml
+# is the harness managed credential store.
+cron/env.sh
+.credentials.yaml
+credentials.yaml
+
+# Session logs are large, compressed, and already durable in their own tree;
+# the snapshot exists to protect the small human-authored state.
+sessions/
+
+# Churn: locks, logs, staging, and the cron scratch working directory.
+cron/runner.log
+cron/snapshot.log
+cron/lock.pid
+cron/*.tmp
+cron/cwd/
+*.pid
+cron/lock
+cron/lock.pid
+profiles/node_modules/
+session-query.sqlite*
+telegram/
+backups/

@@ -1,0 +1,83 @@
+# The cron profile: the one-shot surface scheduled jobs run under, spawned by
+# dsh-cron as `dsh --profile cron -p <prompt> --provider … --model …`.
+# Same shape as the agent profile's user layer (compaction sized for the small
+# local window, readable fetch, no search backend) plus the scheduling pair —
+# jobs run with dsh-cron mounted so a fired job can reschedule, list, or
+# follow up on its own work.
+
+- id: session-title-llm
+  disabled: true
+
+- id: compaction-basic
+  config:
+    thresholdRatio: 0.8
+    maxTokens: 2048
+
+- id: tool-result-pruner
+  config:
+    thresholdChars: 5000
+    headChars: 3072
+    tailChars: 768
+
+# ── web ─────────────────────────────────────────────────────────────────────
+- id: web
+  config:
+    fetchProvider: readable
+
+- insert:
+    - id: web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+    - id: web-fetch-readable
+      name: 'dsh-web-readable'
+
+- id: tool-web
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
+
+# ── project memory ──────────────────────────────────────────────────────────
+- id: agent-instructions
+  config:
+    maxBytes: 65536
+    instructionFileCandidates: [ AGENTS.md, CLAUDE.md, QWEN.md ]
+
+# ── cross-session recall ─────────────────────────────────────────────────────
+# Same durable FTS5 index as the agent profile: a fired job can recall what
+# earlier runs (or the user's interactive sessions in this workspace)
+# established, which is what makes a recurring brief more than stateless.
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-query.sqlite')
+    openAt: first-search
+
+- insert:
+    - id: tool-session-query
+      name: '@deepseek-ai/dsh-tool-session-query'
+
+# ── the hermes layer ────────────────────────────────────────────────────────
+# Cron sessions ride hosted models with big windows, so the memory index gets
+# the full cap here; the agent profile runs the 8k local model and uses 2048.
+- insert:
+    - id: tool-remember
+      name: 'dsh-memory'
+      config:
+        filename: QWEN.md
+        indexCapBytes: 4096
+        nudgeAfterMs: 21600000
+
+    - id: dsh-cron
+      name: 'dsh-cron'
+      config:
+        defaultProvider: zai
+        defaultModel: glm-5.3
+        jobTimeoutMs: 600000
+
+    - id: dsh-soul
+      name: 'dsh-soul'
+      config:
+        maxBytes: 2048
+
+    # Same tool factory as the agent profile: fired jobs can create and use
+    # the agent-built tools too.
+    - id: agent-tools
+      name: 'dsh-agent-tools'

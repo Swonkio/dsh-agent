@@ -1,0 +1,11 @@
+{
+  "name": "dsh-computer-use",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A computer_use tool for dsh: drive a VirtualBox VM's screen, keyboard and mouse.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT",
+  "peerDependencies": { "@deepseek-ai/cordis": "*", "@deepseek-ai/dsh-tools": "*" }
+}

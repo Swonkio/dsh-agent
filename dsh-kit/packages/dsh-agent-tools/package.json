@@ -1,0 +1,11 @@
+{
+  "name": "dsh-agent-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dsh-agent-tools: the agent creates its own tools — validated command-template definitions in $DSH_HOME/tools are registered as real schema-carrying tools at boot, with escaped parameters, scrubbed environment, and security scanning.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT",
+  "peerDependencies": { "@deepseek-ai/cordis": "*", "@deepseek-ai/dsh-tools": "*", "@deepseek-ai/dsh-home-paths": "*" }
+}

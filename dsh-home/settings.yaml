@@ -1,0 +1,84 @@
+# ~/.dsh/settings.yaml — generated 2026-08-24
+#
+# This file NEVER contains a key: `apiKeyEnv` names an environment variable,
+# and the harness reads the value from your environment at run time. Export
+# them from your shell profile:
+#
+#   export OPENROUTER_API_KEY=...
+#   export GLM_API_KEY=...
+
+llm-pi-ai:
+  providers:
+
+    # ── llama.cpp llama-server on this Pi ────────────────────────────────────
+    # Started as:
+    #   llama-server -m ~/models/Bonsai-27B-Q1_0.gguf -c 8192 --alias bonsai-27b --host 127.0.0.1 --port 8080
+    # contextWindow MUST match the server's real -c: it is what the compaction
+    # threshold is a percentage of. Single-slot CPU backend on 4 cores: expect
+    # ~1-2 tok/s, so the idle timeout is generous.
+    local:
+      displayName: local
+      apiKeyEnv: LOCAL_API_KEY
+      api: openai-completions
+      baseURL: http://127.0.0.1:8080/v1
+      streamIdleTimeoutMs: 1200000
+      models:
+        - id: bonsai-27b
+          name: Bonsai 27B (Q1_0)
+          contextWindow: 8192
+          maxTokens: 3072
+
+    # ── OpenRouter ──────────────────────────────────────────────────────────
+    # Model ids change, so read them from the catalogue rather than guessing:
+    #   curl -s https://openrouter.ai/api/v1/models \
+    #     -H "Authorization: Bearer $OPENROUTER_API_KEY" | jq -r '.data[].id'
+    openrouter:
+      displayName: OpenRouter
+      apiKeyEnv: OPENROUTER_API_KEY
+      api: openai-completions
+      baseURL: https://openrouter.ai/api/v1
+      models:
+        - id: anthropic/claude-sonnet-5
+          name: Claude Sonnet 5 (OR)
+          contextWindow: 1000000
+          maxTokens: 32768
+          input: [ text, image ]
+        - id: deepseek/deepseek-v4-flash-0731
+          name: DeepSeek V4 Flash (OR, cheap)
+          contextWindow: 1310720
+          maxTokens: 32768
+
+    # ── z.ai (GLM coding plan) ──────────────────────────────────────────────
+    # NOTE THE BASE URL: the coding plan is a subscription served from
+    # /api/coding/paas/v4; the PAYG path /api/paas/v4 answers error 1113
+    # "Insufficient balance" with the same key. If a valid key gets a balance
+    # error, suspect the URL before the subscription.
+    zai:
+      displayName: z.ai (GLM coding plan)
+      apiKeyEnv: GLM_API_KEY
+      api: openai-completions
+      baseURL: https://api.z.ai/api/coding/paas/v4
+      models:
+        # GLM are reasoning models: a small maxTokens can be spent entirely on
+        # deliberation and return EMPTY content with non-zero reasoning_tokens.
+        # Measured windows: glm-5.3/5.2 = 1M, other 5.x and 4.x = ~200k.
+        - id: glm-5.3
+          name: GLM-5.3 (z.ai, 1M ctx)
+          contextWindow: 1000000
+          maxTokens: 32768
+        - id: glm-4.6
+          name: GLM-4.6 (z.ai)
+          contextWindow: 180000
+          maxTokens: 32768
+        - id: glm-4.6v
+          name: GLM-4.6V (z.ai, vision)
+          contextWindow: 65536
+          maxTokens: 8192
+          input: [ text, image ]
+
+# New sessions start on the hosted GLM coding plan: interactive turns at
+# ~0.5 tok/s on the local 8k model were the bottleneck, not the harness.
+# For turns that must stay on this machine, pick local/bonsai-27b from /model.
+agent-default-model:
+  provider: zai
+  model: glm-5.3

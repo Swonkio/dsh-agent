@@ -1,0 +1,19 @@
+# Secrets never enter history.
+**/cron/env.sh
+**/.credentials.yaml
+**/credentials.yaml
+**/.env
+# Bulk/derived state.
+**/sessions/
+**/profiles/node_modules/
+**/session-query.sqlite*
+**/telegram/
+**/backups/
+**/node_modules/
+**/*.pid
+**/cron/*.log
+**/cron/lock*
+**/cron/cwd/
+*.tar
+*.tar.gz
+*.zip

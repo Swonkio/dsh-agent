@@ -1,0 +1,17 @@
+{
+  "name": "dsh-cron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dsh-cron: durable scheduled agentic tasks for DeepSeek Harness — a cronjob tool, a /cron command, and a crontab-driven runner that fires prompts through a one-shot dsh profile",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-cron": "bin/dsh-cron.mjs"
+  },
+  "license": "MIT",
+  "peerDependencies": { "@deepseek-ai/cordis": "*", "@deepseek-ai/dsh-tools": "*" }
+}
