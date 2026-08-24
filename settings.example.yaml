@@ -73,19 +73,27 @@ llm-pi-ai:
         # deliberation and return EMPTY content with non-zero reasoning_tokens.
         # That is not a failure — give them room.
         #
-        # contextWindow here is deliberately conservative; z.ai's /models does
-        # not report a limit. Raise per-model once verified against their docs.
+        # These windows were MEASURED, not guessed: oversized prompts were sent
+        # until the API answered 1261 "Prompt exceeds max length", then
+        # prompt_tokens was read from the largest accepted request.
+        #   glm-5.3, glm-5.2   1,024,504 accepted  -> 1M
+        #   4.x and other 5.x    181,517 accepted  -> ~200k
+        #
+        # Do NOT mistake the max_tokens error for a context limit: requesting
+        # max_tokens 999999 answers "limit range [1,131072]", which is the
+        # OUTPUT ceiling, not the window. Conflating them understates the 1M
+        # models by 8x.
         - id: glm-5.3
-          name: GLM-5.3 (z.ai)
-          contextWindow: 131072
+          name: GLM-5.3 (z.ai, 1M ctx)
+          contextWindow: 1000000
           maxTokens: 32768
         - id: glm-4.6
           name: GLM-4.6 (z.ai)
-          contextWindow: 131072
+          contextWindow: 180000
           maxTokens: 32768
         - id: glm-4.5-air
           name: GLM-4.5 Air (z.ai, light)
-          contextWindow: 131072
+          contextWindow: 180000
           maxTokens: 32768
 
 # Which model a new session starts on. Everything else is reachable from
