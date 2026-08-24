@@ -10,23 +10,26 @@
 llm-pi-ai:
   providers:
 
-    # ── llama.cpp llama-server on this Pi ────────────────────────────────────
-    # Started as:
-    #   llama-server -m ~/models/Bonsai-27B-Q1_0.gguf -c 8192 --alias bonsai-27b --host 127.0.0.1 --port 8080
-    # contextWindow MUST match the server's real -c: it is what the compaction
-    # threshold is a percentage of. Single-slot CPU backend on 4 cores: expect
-    # ~1-2 tok/s, so the idle timeout is generous.
+    # ── llama.cpp / llama-swap on this host ────────────────────────────────────
     local:
-      displayName: local
+      displayName: local (llama.cpp)
+      # llama.cpp ignores the Authorization header, but the provider still
+      # requires a credential to be present. Export any value:
+      #   export LOCAL_API_KEY=local
       apiKeyEnv: LOCAL_API_KEY
       api: openai-completions
       baseURL: http://127.0.0.1:8080/v1
+      # A local single-slot server can stall on a cold model load; allow a
+      # generous idle window so a slow first token is not read as a hang.
       streamIdleTimeoutMs: 1200000
       models:
-        - id: bonsai-27b
-          name: Bonsai 27B (Q1_0)
-          contextWindow: 8192
-          maxTokens: 3072
+        # contextWindow MUST equal the server's real -c: it is what the
+        # compaction threshold is a percentage of.
+        - id: qwen3.8-27b-uncensored
+          name: Qwen3.8 27B (local, vision)
+          contextWindow: 229376
+          maxTokens: 32768
+          input: [ text, image ]
 
     # ── OpenRouter ──────────────────────────────────────────────────────────
     # Model ids change, so read them from the catalogue rather than guessing:
@@ -78,7 +81,9 @@ llm-pi-ai:
 
 # New sessions start on the hosted GLM coding plan: interactive turns at
 # ~0.5 tok/s on the local 8k model were the bottleneck, not the harness.
-# For turns that must stay on this machine, pick local/bonsai-27b from /model.
+# Everything reachable from /model at runtime; hosted providers are optional.
+# New sessions start on the LOCAL model — nothing leaves the machine unless a
+# hosted model is picked from /model. Swap provider/model here to change it.
 agent-default-model:
-  provider: zai
-  model: glm-5.3
+  provider: local
+  model: qwen3.8-27b-uncensored

@@ -80,6 +80,10 @@
       name: 'dsh-memory'
       config:
         filename: QWEN.md
+        # Opt-in self-learning: a detached pass saves lessons after a turn.
+        # backgroundReview: true
+        # reviewProvider: local        # which route the review runs on
+        # reviewModel: your-local-model
 
 # ── OPTIONAL: drive a VirtualBox VM ─────────────────────────────────────────
 # Delete this whole block unless you actually have VMs. It needs VBoxManage on

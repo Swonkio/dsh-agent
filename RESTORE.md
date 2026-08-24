@@ -1,6 +1,6 @@
 # dsh-agent — restore guide
 
-This archive holds everything built on the source Pi: the dsh-kit plugin tree
+This archive holds everything built on the source machine: the dsh-kit plugin tree
 (at its `dsh-agent-local` commit) and the `$DSH_HOME` state the system runs on.
 Secrets are NOT included (API keys, bot token, credentials live outside git by
 design) — bring your own.
@@ -79,7 +79,7 @@ this archive); unit suites with `node tools/test.mjs` inside each
 
 - The kit diverges from upstream Swonkio/dsh-kit (rename + all new packages);
   keep merging upstream into `main`, keep local work on `dsh-agent-local`.
-- Local llama-server (bonsai-27b) is opt-in via `/model`; hosted glm-5.3 is
+- The local model (settings.yaml `local` provider) is opt-in via `/model`; hosted glm-5.3 is
   the default. Vision is `glm-4.6v` (there is no 5v; used only for images,
   5.3 stays the task model). ASR/TTS/search are NOT on the coding plan —
   voice transcribes locally with whisper.

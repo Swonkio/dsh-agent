@@ -75,11 +75,11 @@ export function reviewPrompt(userText, assistantText, capBytes = 4096) {
  * Fire the detached review pass: a one-shot agent turn in its own session
 /**
  * Fire the detached review pass: a one-shot agent turn in its own session
- * namespace (~/.dsh/reviews) on the task model. The review session itself
+ * namespace (~/.dsh/reviews) on the configured review route. The review
  * runs the cron profile, where backgroundReview is unset — no recursion.
  * Lives inside apply() to close over the resolved memory home.
  */
-async function maybeReviewOf(home, userText, assistantText) {
+async function maybeReviewOf(home, userText, assistantText, reviewProvider, reviewModel) {
   try {
     const { mkdir, writeFile, stat } = await import('node:fs/promises')
     const marker = join(home, '.last-review')
@@ -95,7 +95,7 @@ async function maybeReviewOf(home, userText, assistantText) {
     const env = { ...(await envFileExports()), ...process.env }
     const child = spawn(process.execPath, [
       dshBinPath(), '--profile', 'cron', '-p', reviewPrompt(userText, assistantText),
-      '--provider', 'zai', '--model', 'glm-5.3',
+      '--provider', reviewProvider, '--model', reviewModel,
     ], { cwd: join(dshHomePath(), 'reviews'), detached: true, stdio: 'ignore', env })
     child.unref()
   } catch (error) {
@@ -159,13 +159,19 @@ function renderFile(preamble, sections) {
 /**
  * Register the tools and prompt sections.
  * @param {object} ctx - plugin context carrying `ctx.tools` and `ctx.systemPrompt`.
- * @param {object} config - `{ filename?, projectRootMarkers?, indexCapBytes?, nudgeAfterMs? }`.
+ * @param {object} config - `{ filename?, projectRootMarkers?, indexCapBytes?, nudgeAfterMs?, backgroundReview?, reviewProvider?, reviewModel? }`.
  */
 export function apply(ctx, config = {}) {
   const filename = config.filename ?? 'QWEN.md'
   const markers = config.projectRootMarkers ?? ['.git']
   const indexCapBytes = config.indexCapBytes ?? 4096
   const nudgeAfterMs = config.nudgeAfterMs ?? 6 * 60 * 60 * 1000
+  // The background review runs as its own detached agent turn; which model it
+  // uses is separate from the interactive default. It defaults to the same
+  // hosted route the kit shipped with, so an unconfigured install behaves as
+  // before, but a local-only deployment can point it at the local model.
+  const reviewProvider = config.reviewProvider ?? 'zai'
+  const reviewModel = config.reviewModel ?? 'glm-5.3'
   const memoryHome = dshHomePath('memory')
 
   // The relevance signal for memory injection: the newest thing the human
@@ -200,7 +206,7 @@ export function apply(ctx, config = {}) {
       if (skillUsedThisTurn && event.data?.reason?.kind === 'failed') skillFailedNudge = true
       skillUsedThisTurn = false
       if (event.data?.reason?.kind === 'completed' && config.backgroundReview === true) {
-        void maybeReviewOf(memoryHome, lastUserText, lastAssistantText)
+        void maybeReviewOf(memoryHome, lastUserText, lastAssistantText, reviewProvider, reviewModel)
       }
     }
   })

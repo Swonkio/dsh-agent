@@ -5,35 +5,28 @@
       "id": "j-46a86e88",
       "name": "btc-price",
       "enabled": true,
-      "prompt": "Fetch the current Bitcoin price in USD — use web_fetch on https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd (or any live source if that fails). Reply with exactly one line in the format: BTC $<price> USD (timestamp UTC). No other text.",
-      "provider": "zai",
-      "model": "glm-5.3",
+      "prompt": "Fetch the current Bitcoin price in USD \u2014 use web_fetch on https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd (or any live source if that fails). Reply with exactly one line in the format: BTC $<price> USD (timestamp UTC). No other text.",
+      "provider": "local",
+      "model": "qwen3.8-27b-uncensored",
       "telegram": true,
       "createdAt": "2026-08-24T20:14:09.776Z",
-      "lastRun": "2026-08-24T21:00:01.154Z",
-      "lastStatus": "ok",
       "schedule": {
         "cron": "*/5 * * * *"
-      },
-      "nextRun": "2026-08-24T21:05:00.000Z"
+      }
     },
     {
       "id": "j-4477b4ed",
-      "name": "pi-health",
+      "name": "host-health",
       "enabled": true,
       "continuous": true,
-      "sessionId": "session-5470b9e1-7495-4e69-9300-c877961fdf5a",
       "telegram": true,
       "schedule": {
         "cron": "10 8 * * *"
       },
-      "prompt": "Daily Raspberry Pi health check. Run these commands with the bash tool: vcgencmd measure_temp; vcgencmd get_throttled; df -h /; free -h; uptime. Then reply with a three-line summary for the owner: (1) CPU temperature and whether throttling has occurred (get_throttled 0x0 means none — decode other values), (2) root disk use percent and a warning above 80%, (3) memory pressure and load average versus 4 cores. Flag anything abnormal with a short recommendation. Keep it under 80 words.",
-      "provider": "zai",
-      "model": "glm-5.3",
-      "createdAt": "2026-08-24T20:31:36.996Z",
-      "lastRun": "2026-08-24T20:32:17.998Z",
-      "lastStatus": "ok",
-      "nextRun": "2026-08-25T12:10:00.000Z"
+      "prompt": "Daily host health check. Run these with the bash tool (skip any that are not installed): uptime; df -h /; free -h 2>/dev/null || vm_stat; sensors 2>/dev/null || vcgencmd measure_temp 2>/dev/null || echo \"no temp sensor\". Then reply with a three-line summary for the owner: (1) load average versus core count and any temperature reading, (2) root disk use percent with a warning above 80%, (3) memory pressure. Flag anything abnormal with a short recommendation. Keep it under 80 words.",
+      "provider": "local",
+      "model": "qwen3.8-27b-uncensored",
+      "createdAt": "2026-08-24T20:31:36.996Z"
     }
   ]
 }

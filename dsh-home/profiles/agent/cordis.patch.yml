@@ -18,10 +18,10 @@
 - id: compaction-basic
   config:
     thresholdRatio: 0.8
-    # Sized for the 8192-token Ollama window: input + output must fit, so the
-    # summary cap can't exceed the window. Small, but compaction fails closed
-    # if the summary is cut mid-write, so it still gets most of the room.
-    maxTokens: 2048
+    # Sized for the local 229k window and a thinking model: reasoning tokens
+    # are spent against this same cap, so too small a value gets eaten by
+    # deliberation and the summary is truncated (compaction fails closed then).
+    maxTokens: 24576
 
 # Tool results are trimmed only when genuinely large. Measured over 313 real
 # results: p50 was 349 chars and p99 was 45,767 — the mass is a handful of huge
@@ -88,21 +88,26 @@
       name: 'dsh-memory'
       config:
         filename: QWEN.md
-        # The agent profile rides the 8k local model by default; the memory
-        # index must leave room for tools schema in that window.
-        indexCapBytes: 2048
+        # The 229k local window has room for a fuller memory index.
+        indexCapBytes: 8192
         nudgeAfterMs: 21600000
-        # Opt-in self-learning: after a completed turn, a detached glm-5.3
-        # pass saves durable lessons to memory by itself (throttled to one
-        # review per 10 minutes). The cron profile leaves this unset on
-        # purpose — reviewing reviews would recurse.
+        # Opt-in self-learning: after a completed turn, a detached pass saves
+        # durable lessons to memory by itself (throttled to one review per few
+        # minutes). Runs on the LOCAL model here — no tokens leave the machine.
+        # The cron profile leaves backgroundReview unset: reviewing reviews
+        # would recurse.
         backgroundReview: true
+        reviewProvider: local
+        reviewModel: qwen3.8-27b-uncensored
 
     - id: dsh-cron
       name: 'dsh-cron'
       config:
-        defaultProvider: zai
-        defaultModel: glm-5.3
+        # New cron jobs default to the local model; override per-job with the
+        # provider/model args of cron_create for anything that needs a hosted
+        # model (e.g. a task the local model is too small for).
+        defaultProvider: local
+        defaultModel: qwen3.8-27b-uncensored
         jobTimeoutMs: 600000
 
     - id: dsh-soul
