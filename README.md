@@ -81,4 +81,4 @@ Edit `~/.dsh/profiles/tui/cordis.patch.yml` (the installer copies a template), t
 
 ## Credits
 
-Built on [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT, © DeepSeek). Article extraction uses Mozilla Readability; the terminal traces use Braille cells; the boot sequence is a caustic light simulation rendered as ASCII.
+Built on [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT, © DeepSeek).
