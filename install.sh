@@ -1,6 +1,8 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 # Install the dsh kit against an existing deepseek-harness checkout.
-set -euo pipefail
+# POSIX sh, not bash: the bootstrap runs this with `sh`, which is dash on
+# Debian and Ubuntu, and dash has no `pipefail`.
+set -eu
 
 HARNESS=${DSH_HARNESS:-}
 if [ -z "$HARNESS" ]; then
