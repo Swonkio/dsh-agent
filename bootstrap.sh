@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # dsh kit installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/bootstrap.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Swonkio/dsh-kit/main/bootstrap.sh | sh
 #
 # Runs under `sh` piped from curl, so it never reads stdin — stdin IS the
 # script. Every choice is an environment variable instead:
@@ -12,7 +12,7 @@
 #   DSH_REF=main        branch or tag to install
 set -eu
 
-REPO=${DSH_REPO:-OWNER/REPO}
+REPO=${DSH_REPO:-Swonkio/dsh-kit}
 REF=${DSH_REF:-main}
 PREFIX=${DSH_PREFIX:-$HOME/.local/share/dsh-kit}
 

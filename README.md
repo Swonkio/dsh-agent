@@ -28,19 +28,19 @@ One line, if you already have a built harness:
 
 ```sh
 DSH_HARNESS=/path/to/deepseek-harness \
-  curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/bootstrap.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/Swonkio/dsh-kit/main/bootstrap.sh | sh
 ```
 
 Or let it clone and build the harness for you (large download, slow build, needs `pnpm`):
 
 ```sh
-DSH_BUILD=1 curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/bootstrap.sh | sh
+DSH_BUILD=1 curl -fsSL https://raw.githubusercontent.com/Swonkio/dsh-kit/main/bootstrap.sh | sh
 ```
 
 From a clone instead:
 
 ```sh
-git clone https://github.com/OWNER/REPO && cd REPO
+git clone https://github.com/Swonkio/dsh-kit && cd dsh-kit
 DSH_HARNESS=/path/to/deepseek-harness ./install.sh
 ```
 
