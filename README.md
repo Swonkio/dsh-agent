@@ -116,6 +116,15 @@ git clone https://github.com/Swonkio/dsh-agent && cd dsh-agent
 
 `install.sh` links every kit package into `~/.dsh/profiles/node_modules/`, writes the `agent` profile patch and the sandboxed `review` profile, and drops a `dsh-agent` launcher into `~/.local/bin`. `DSH_HOME` relocates the whole data dir if you don't want `~/.dsh`.
 
+## Updating and restoring
+
+**Updating** — re-run the bootstrap (or `install.sh` from a pull); it reuses the harness checkout, re-links the packages, and **keeps your existing profile patch and settings** (`kept existing …`). Pin a version with `DSH_REF=v0.1.0` if you want releases rather than `main`.
+
+**Restoring the learned state** — the agent's memory, skills, and profiles live in `$DSH_HOME` under git (`dsh-snapshot`):
+- local history: `git -C ~/.dsh log` reaches every idle commit;
+- offsite: if `pushRemote` is configured, `git clone <that-private-repo> ~/.dsh-agent` on a new machine restores everything the agent ever learned — secrets excepted by design (bring your own keys and `settings.yaml` credentials);
+- no network: `git clone <bundle-file> ~/.dsh-agent` from any `dsh-home-*.bundle` written with `bundleDir`.
+
 ## Configure
 
 **1. Providers — no keys in files, ever.** Copy [`settings.example.yaml`](settings.example.yaml) to `~/.dsh/settings.yaml`:

@@ -44,6 +44,9 @@ export const DEFAULTS = {
   idleAfterMs: 5 * 60 * 1000,
   /** Where nightly bundles go; set falsy to disable bundling. */
   bundleDir: '',
+  /** Offsite git remote for the learned state (a PRIVATE repo). Opt-in: it
+   *  uploads the memory content to wherever it points, by design. */
+  pushRemote: '',
 }
 
 /** Run git in the home; resolve undefined on any failure (never throw). */
@@ -117,8 +120,34 @@ export async function bundleTo(home = dshHomePath(), dir) {
 }
 
 /**
+ * Push the snapshot repo to an offsite remote — the step that makes the
+ * learned state survive the DISK, not just mistakes. Opt-in via `pushRemote`.
+ *
+ * Auth, in order: whatever credential helper the machine already has (SSH
+ * remotes, gh-configured helpers), then `gh auth git-credential` inline.
+ * A push that cannot authenticate resolves false; the local commit already
+ * happened and the next successful push carries it.
+ *
+ * @returns {Promise<boolean>} whether the remote accepted the push.
+ */
+export async function pushSnapshot(home = dshHomePath(), remoteUrl) {
+  if (remoteUrl === undefined || remoteUrl === '') return false
+  const remote = 'origin'
+  const current = (await git(home, ['remote', 'get-url', remote]))?.trim()
+  if (current !== remoteUrl) {
+    if (current !== undefined) await git(home, ['remote', 'remove', remote])
+    if (await git(home, ['remote', 'add', remote, remoteUrl]) === undefined) return false
+  }
+  const branch = (await git(home, ['branch', '--show-current']))?.trim() || 'master'
+  const withGh = ['-c', 'credential.helper=!gh auth git-credential']
+  const pushed = await git(home, ['push', '-u', remote, branch])
+    ?? await git(home, [...withGh, 'push', '-u', remote, branch])
+  return pushed !== undefined
+}
+
+/**
  * @param {object} ctx - Cordis plugin context.
- * @param {object} [config] - `{ enabled?, minIntervalMs?, idleAfterMs?, bundleDir? }`.
+ * @param {object} [config] - `{ enabled?, minIntervalMs?, idleAfterMs?, bundleDir?, pushRemote? }`.
  */
 export function apply(ctx, config = {}) {
   const cfg = { ...DEFAULTS, ...config }
@@ -151,6 +180,9 @@ export function apply(ctx, config = {}) {
       const result = await snapshotNow()
       if (result.committed) lastCommitMs = Date.now()
       if (result.committed && cfg.bundleDir) await bundleTo(undefined, cfg.bundleDir)
+      // Offsite only when something new was committed: an empty push is a
+      // round trip for nothing, and a failed one retries on the next commit.
+      if (result.committed && cfg.pushRemote) await pushSnapshot(undefined, cfg.pushRemote)
     })()
   }, 60_000)
   timer.unref?.()
@@ -162,7 +194,10 @@ export function apply(ctx, config = {}) {
     handler: async () => {
       const result = await snapshotNow()
       if (result.committed) lastCommitMs = Date.now()
-      return { kind: 'success', text: renderStatus(result) }
+      const pushed = result.committed && cfg.pushRemote !== ''
+        ? await pushSnapshot(undefined, cfg.pushRemote)
+        : undefined
+      return { kind: 'success', text: renderStatus(result) + (pushed === undefined ? '' : pushed ? '\n\nOffsite: pushed.' : '\n\nOffsite: push failed — the local commit stands; the next snapshot retries.') }
     },
   })
 }

@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly: the harness patches below must track a MOVING upstream, and
+    # upstream commits between kit releases are exactly when they rot.
+    - cron: '0 6 * * 1'
 
 jobs:
   test:
@@ -18,3 +22,27 @@ jobs:
       # suites all run. See README → Testing.
       - name: Run unit suites
         run: node tools/test-all.mjs
+
+  # The kit carries patches against deepseek-harness (harness/*.patch). They
+  # apply at install time with --check guards that FAIL SILENTLY when the
+  # source has moved — which is how a patch once rotted unnoticed until a
+  # fresh install shipped without it. This job makes the rot loud: every
+  # patch must still apply to CURRENT upstream master.
+  patch-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Harness patches still apply to upstream master
+        run: |
+          git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness /tmp/harness
+          shopt -s nullglob
+          patches=(harness/*.patch)
+          if [ ${#patches[@]} -eq 0 ]; then
+            echo "no harness patches to guard"; exit 0
+          fi
+          for p in "${patches[@]}"; do
+            echo "::group::checking $p"
+            (cd /tmp/harness && git apply --check "$GITHUB_WORKSPACE/$p")
+            echo "::endgroup::"
+            echo "OK: $p"
+          done

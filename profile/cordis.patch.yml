@@ -155,9 +155,13 @@
       name: 'dsh-prompt-audit'
 
     # Durability for the learned state: git-backed $DSH_HOME (secrets and
-    # session logs excluded), idle auto-commit, /snapshot command.
+    # session logs excluded), idle auto-commit, /snapshot command. Optional
+    # offsite: point pushRemote at a PRIVATE repo you own and idle commits
+    # push there too (this uploads memory content to that host, by design).
     - id: snapshot
       name: 'dsh-snapshot'
+      # config:
+      #   pushRemote: https://github.com/you/dsh-agent-state.git
 
 # ── OPTIONAL: drive a VirtualBox VM ─────────────────────────────────────────
 # Delete this whole block unless you actually have VMs. It needs VBoxManage on
