@@ -1,0 +1,18 @@
+[
+  { "expect": "an agent in your terminal", "timeout": 90000 },
+  { "expect": "ask anything", "timeout": 30000 },
+  { "delay": 2000 },
+  { "send": "/memory\r" },
+  { "expect": "Memory \\[", "timeout": 30000 },
+  { "delay": 1000 },
+  { "send": "/loop\r" },
+  { "expect": "Learning loop", "timeout": 30000 },
+  { "delay": 1000 },
+  { "send": "/snapshot\r" },
+  { "expect": "State snapshot", "timeout": 60000 },
+  { "delay": 1000 },
+  { "send": "/prompt\r" },
+  { "expect": "assembly|System prompt", "timeout": 30000 },
+  { "delay": 1000 },
+  { "send": "\u0004" }
+]

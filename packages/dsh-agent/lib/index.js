@@ -1161,9 +1161,10 @@ export class AgentSurface {
     this.showStatus()
     let execution
     try {
-      // The composer sends no images with a registry command here; the
-      // service signature is (agent, line, images, signal).
-      execution = await commands.execute(this.agent, line, [], controller.signal)
+      // Registry commands take no images — the service signature is
+      // (agent, line, signal); a fourth argument lands ON the signal and
+      // crashes its abort wiring ("signal.addEventListener is not a function").
+      execution = await commands.execute(this.agent, line, controller.signal)
       // A command may schedule model-visible work on the agent (plan mode
       // submits its message); it streams under the same status line.
       await this.agent.whenIdle()

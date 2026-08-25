@@ -22,6 +22,7 @@ assert.ok(home?.includes('dsh-test-home'), `refusing to run against a real DSH_H
 const listeners = {}
 const ctx = {
   on(event, handler) { listeners[event] = handler },
+  effect: () => {},
   systemPrompt: { section: () => {} },
   tools: { register: () => {} },
   commands: { register: () => {} },

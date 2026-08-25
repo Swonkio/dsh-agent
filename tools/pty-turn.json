@@ -1,0 +1,36 @@
+[
+  {
+    "expect": "ask anything",
+    "timeout": 90000
+  },
+  {
+    "delay": 2000
+  },
+  {
+    "send": "Reply with exactly the single word READY and nothing else\r"
+  },
+  {
+    "expect": "READY",
+    "timeout": 180000
+  },
+  {
+    "expect": "ask anything",
+    "timeout": 30000
+  },
+  {
+    "delay": 1500
+  },
+  {
+    "send": "/prompt\r"
+  },
+  {
+    "expect": "sections",
+    "timeout": 30000
+  },
+  {
+    "delay": 1500
+  },
+  {
+    "send": "\u0004"
+  }
+]

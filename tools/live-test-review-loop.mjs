@@ -12,11 +12,20 @@ import assert from 'node:assert/strict'
 
 /** The local model the scratch reviews run on: DSH_TEST_MODEL=your-model-id node tools/live-test-*.mjs */
 const MODEL = process.env.DSH_TEST_MODEL ?? 'local-model'
-import { stat } from 'node:fs/promises'
+import { stat, mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import * as memory from '../packages/dsh-memory/lib/index.js'
 
 const home = process.env.DSH_HOME
 assert.ok(home?.includes('dsh-test-home'), `refusing a real DSH_HOME (${home})`)
+
+// Self-contained lesson corpus so assertions cannot drift from setup.
+const LESSONS = [
+  '- Lesson: vbox-log-first: When diagnosing the VirtualBox VM crash, read the vbox-install log with one command before stating the root cause',
+  '- Lesson: npm-symlink-destruction: When npm install runs inside a symlinked kit package it deletes harness packages it calls extraneous',
+]
+await mkdir(join(home, 'memory'), { recursive: true })
+await writeFile(join(home, 'memory', 'MEMORY.md'), `# Memory index\n\n${LESSONS.join('\n')}\n`)
 
 const sections = {}
 const listeners = {}
@@ -27,10 +36,13 @@ const ctx = {
   tools: { register: () => {} },
   commands: { register: () => {} },
 }
+// smartDispatch is OFF: this suite asserts the QUEUE discipline (coalesce
+// window → queue → idle drain). The queue-jump-on-idle-slot behavior is
+// covered separately by the probeBackendIdle unit checks and a live probe.
 memory.apply(ctx, {
   backgroundReview: true, reviewProvider: 'local', reviewModel: MODEL,
   learnFromCorrections: true, correctionReviewProvider: 'local', correctionReviewModel: MODEL,
-  coalesceWindowMs: 8000, idleAfterMs: 2000, idleDrainCooldownMs: 2000,
+  coalesceWindowMs: 8000, idleAfterMs: 2000, idleDrainCooldownMs: 2000, smartDispatch: false,
   lessonEfficacy: true, lessonsTopK: 2, lessonsMinScore: 0.2,
   digestSessions: true, digestReviewProvider: 'local', digestReviewModel: MODEL,
   synthesizeSkills: true, skillReviewProvider: 'local', skillReviewModel: MODEL,

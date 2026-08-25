@@ -1,15 +1,31 @@
 /**
  * LIVE test A — lesson recall through the real dsh-memory apply().
- * Scratch DSH_HOME (env) isolates the memory store; a fake ctx captures the
- * registered prompt sections; firehose events drive the relevance query.
+ * Self-contained: writes its own scratch memory index into DSH_HOME (which
+ * MUST point at a scratch home — refused otherwise), then drives the
+ * relevance query through firehose events.
  */
 import assert from 'node:assert/strict'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import * as memory from '../packages/dsh-memory/lib/index.js'
+
+const home = process.env.DSH_HOME
+assert.ok(home?.includes('test-home'), `refusing a non-scratch DSH_HOME (${home})`)
+
+// The lesson corpus this test asserts against, so the two can never drift.
+const LESSONS = [
+  '- Lesson: vbox-log-before-concluding: When diagnosing the VirtualBox VM crash, read the vbox-install log with one command before stating the root cause',
+  '- Lesson: npm-symlink-destruction: When npm install runs inside a symlinked kit package it deletes harness packages it calls extraneous',
+  '- Local model serving: llama.cpp on 127.0.0.1:8080 with contextWindow matched',
+]
+await mkdir(join(home, 'memory'), { recursive: true })
+await writeFile(join(home, 'memory', 'MEMORY.md'), `# Memory index\n\n${LESSONS.join('\n')}\n`)
 
 const sections = {}
 const listeners = {}
 const ctx = {
   on(event, handler) { listeners[event] = handler },
+  effect: () => {},
   systemPrompt: { section: s => { sections[s.name] = s } },
   tools: { register: () => {} },
   commands: { register: () => {} },
@@ -49,6 +65,7 @@ assert.match(text2, /npm-symlink-destruction/, 'recall follows task drift')
   const listeners2 = {}
   const ctx2 = {
     on(event, handler) { listeners2[event] = handler },
+    effect: () => {},
     systemPrompt: { section: s => { sections2[s.name] = s } },
     tools: { register: () => {} },
     commands: { register: () => {} },
