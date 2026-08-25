@@ -1,0 +1,169 @@
+# dsh-agent profile patch — TEMPLATE
+#
+# Copy to ~/.dsh/profiles/agent/cordis.patch.yml and edit the marked lines.
+# Everything here is applied on top of the base bundle.
+
+# The LLM session titler makes a second model request right after the first
+# prompt. A local server that holds one model and serves one request at a time
+# queues that request AHEAD of the turn you are waiting on. Remove this row if
+# your backend has spare capacity.
+- id: session-title-llm
+  disabled: true
+
+# Auto-compaction fires at 80% of the routed model's context window.
+# Do not lower it far: compaction REWRITES the prompt prefix and so invalidates
+# the KV cache, which on a warm session serves the large majority of input
+# tokens. Firing it more often trades a cheap large prefix for repeated full
+# re-prefills.
+- id: compaction-basic
+  config:
+    thresholdRatio: 0.8
+    # Sized for a thinking model: reasoning tokens are spent against this same
+    # cap, so a smaller value gets eaten by deliberation and the summary is cut
+    # off mid-write — which compaction fails closed on.
+    maxTokens: 24576
+
+# Tool results are trimmed only when genuinely large. Measured over 313 real
+# results: p50 was 349 chars and p99 was 45,767 — the mass is a handful of huge
+# outputs, not many medium ones, so cutting earlier would lose information the
+# agent needs while saving little.
+- id: tool-result-pruner
+  config:
+    thresholdChars: 5000
+    headChars: 3072
+    tailChars: 768
+
+# ── web ─────────────────────────────────────────────────────────────────────
+- id: web
+  config:
+    # searxng needs a SearXNG instance; drop this line to use the bundled
+    # DeepSeek search instead (which needs DEEPSEEK_API_KEY).
+    searchProvider: searxng
+    fetchProvider: readable
+
+- insert:
+    # EDIT: point at your own SearXNG, or remove this row and the line above.
+    - id: web-search-searxng
+      name: 'dsh-web-searxng'
+      config:
+        baseUrl: http://127.0.0.1:8888
+        timeoutMs: 15000
+        maxResults: 10
+
+    - id: web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+
+    # Article extraction before markdown conversion. The shipped provider
+    # returns the whole document and the consumer converts ALL of it, chrome
+    # included — one Wikipedia article measured ~21k tokens whose first eight
+    # lines were "Jump to content", "Main menu" and similar. This brings the
+    # same page back at ~4k tokens with headings, lists and links intact, and
+    # passes link-index pages through untouched.
+    - id: web-fetch-readable
+      name: 'dsh-web-readable'
+
+# A fetch tool lets the MODEL choose the request target, which is an SSRF
+# surface. Enabling it is a considered trade for an agent that reads docs.
+- id: tool-web
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
+
+# ── project memory ──────────────────────────────────────────────────────────
+- id: agent-instructions
+  config:
+    maxBytes: 65536
+    instructionFileCandidates: [ AGENTS.md, CLAUDE.md, QWEN.md ]
+
+- insert:
+    - id: tool-remember
+      name: 'dsh-memory'
+      config:
+        filename: QWEN.md
+        # Opt-in self-learning: a detached pass saves lessons after a turn.
+        # backgroundReview: true
+        # reviewProvider: local        # which route the review runs on
+        # reviewModel: your-local-model
+        # Failure-driven learning: failed / interrupted / thrashing / loop-guard
+        # turns get a post-mortem that writes a durable "Lesson: …" memory so the
+        # mistake is not repeated. Defaults to follow backgroundReview + its route.
+        # learnFromFailures: true
+        # failureReviewProvider: local
+        # failureReviewModel: your-local-model
+        # Proactive lesson recall: top few "Lesson: …" memories re-scored
+        # against the latest exchange, in their own small prompt section.
+        # lessonsTopK: 3
+        # lessonsMinScore: 0.25
+        # Auto-skill synthesis: a completed turn that ran a real procedure
+        # (≥5 tool calls incl. a mutating one) gets a detached review that may
+        # distil it into a named skill (own 15-min throttle). Defaults to
+        # following backgroundReview + its route.
+        # synthesizeSkills: true
+        # skillReviewProvider: local
+        # skillReviewModel: your-local-model
+        # Correction capture: a user correction of the previous answer gets
+        # its own review that saves a Lesson/Preference memory.
+        # learnFromCorrections: true
+        # correctionReviewProvider: local
+        # correctionReviewModel: your-local-model
+        # Review dispatch: reviews within 2 min of a spawn queue instead of
+        # competing with the live turn; the queue drains when the user has
+        # been idle 5 min, as one combined model call.
+        # coalesceWindowMs: 120000
+        # idleAfterMs: 300000
+        # Lesson efficacy: `curate report` lists lessons that keep being
+        # surfaced yet still precede failures (read but not followed).
+        # lessonEfficacy: true
+        # Session digests: idle-time one-paragraph session records (also set
+        # enableDigestSave: true in profiles/review/cordis.patch.yml).
+        # digestSessions: true
+        # digestReviewProvider: local
+        # digestReviewModel: your-local-model
+
+    # Loop circuit-breaker. The base bundle's repeat-tool-reminder only nudges
+    # on BYTE-IDENTICAL repeated calls and never stops; it misses a turn that
+    # keeps taking DIFFERENT steps forever, or a step whose reasoning spins on
+    # one sentence. This caps both: soft nudges past `softStep`, a hard turn-end
+    # past `hardStep`, and a streamed-response breaker for repeated/over-long
+    # reasoning — each auto-recovering with one focused follow-up, bounded by
+    # `maxRecoveries`, then handing control back. Defaults suit a local model.
+    - id: loop-guard
+      name: 'dsh-loop-guard'
+      config:
+        softStep: 25
+        hardStep: 60
+        repeatThreshold: 6
+        maxRecoveries: 3
+
+    # Grounding nudges — attack the behaviour behind the loops, not just the
+    # symptom. (1) verify-before-conclude: a stated cause with no tool call
+    # behind it gets one rate-limited "check the actual system" nudge.
+    # (2) plan-on-multistep: a turn `planStep` steps in with `planMinTools`
+    # tool calls and no todo_write gets exactly one "write a quick plan"
+    # nudge. Both reset per turn.
+    - id: grounding
+      name: 'dsh-grounding'
+      config:
+        verifyEvery: 6
+        planStep: 5
+
+    # /prompt — the assembled system prompt, section by section, with byte
+    # counts. Zero model tokens.
+    - id: prompt-audit
+      name: 'dsh-prompt-audit'
+
+# ── OPTIONAL: drive a VirtualBox VM ─────────────────────────────────────────
+# Delete this whole block unless you actually have VMs. It needs VBoxManage on
+# PATH, each VM's VRDE/VNC enabled, and `--mouse usbtablet` (a relative ps2
+# mouse ignores the absolute coordinates VNC sends). `find` needs tesseract-ocr.
+#
+# - insert:
+#     - id: tool-computer-use
+#       name: 'dsh-computer-use'
+#       config:
+#         settleMs: 700
+#         defaultVm: YOUR_VM_NAME
+#         vms:
+#           YOUR_VM_NAME:
+#             vncPort: 5900
+#             vncPasswordFile: /path/to/your/vnc-password

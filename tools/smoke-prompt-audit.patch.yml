@@ -1,0 +1,4 @@
+# Live-test overlay: attach the new dsh-prompt-audit to a headless run.
+- insert:
+    - id: prompt-audit
+      name: 'dsh-prompt-audit'

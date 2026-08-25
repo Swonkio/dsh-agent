@@ -1,0 +1,10 @@
+{
+  "name": "dsh-grounding",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Grounding nudges for dsh-agent: verify-before-conclude (a stated conclusion with no tool evidence gets one rate-limited \"go check it\" nudge) and plan-on-multistep (a turn several tool calls in with no todo_write gets one \"write a plan\" nudge).",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT"
+}
