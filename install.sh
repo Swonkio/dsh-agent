@@ -40,6 +40,13 @@ done
 FETCH="$HARNESS/packages/web/web-fetch-http"
 [ -d "$FETCH" ] && ln -sfn "$FETCH" "$SCOPE/@deepseek-ai/dsh-web-fetch-http" && echo "  linked dsh-web-fetch-http"
 
+# The agent profile: root files (bundle declaration + empty patch root)
+# first — a profile dir with only a patch file does not load — then the
+# commented patch template the user edits.
+mkdir -p "$HOME/.dsh/profiles/agent"
+for root in package.json cordis.yml; do
+  [ -e "$HOME/.dsh/profiles/agent/$root" ] || cp "$KIT/profile/$root" "$HOME/.dsh/profiles/agent/"
+done
 PROFILE="$HOME/.dsh/profiles/agent/cordis.patch.yml"
 if [ -e "$PROFILE" ]; then
   echo "kept existing $PROFILE (template is at $KIT/profile/cordis.patch.yml)"
