@@ -60,8 +60,20 @@ ln -sfn ~/deepseek-harness/packages/session-query/tool-session-query \
 ln -sfn ~/deepseek-harness/packages/web/web-fetch-http \
         ~/.dsh-agent/profiles/node_modules/@deepseek-ai/dsh-web-fetch-http
 
+# 3b. external npm deps. Most kit packages depend only on the harness closure
+#     and their in-repo siblings, which the links above resolve. The exception
+#     is dsh-web-readable, which pulls @mozilla/readability, linkedom and
+#     turndown from npm. Install them, or the agent will refuse to boot with
+#     "Cannot find package '@mozilla/readability'" — a single plugin's missing
+#     dependency fails the whole plugin tree, so this is not optional if the
+#     agent profile keeps the readable fetcher.
+( cd ~/dsh-kit/packages/dsh-web-readable && npm install --no-audit --no-fund )
+#     Offline alternative: drop the readable fetcher and keep plain http fetch —
+#     in dsh-home/profiles/agent/cordis.patch.yml set `web.fetchProvider: http`
+#     and remove the web-fetch-readable insert; no external deps are then needed.
+
 # 4. launchers — the launcher is what pins the separate state directory
-printf '#!/bin/sh\nexec env DSH_HOME="${DSH_HOME:-$HOME/.dsh-agent}" node "$HOME/deepseek-harness/apps/cli/lib/bin.js" --profile agent "$@"\n' > ~/.local/bin/dsh-agent
+printf '#!/bin/sh\nexec env DSH_HOME="${DSH_HOME:-$HOME/.dsh-agent}" DSH_HARNESS_BIN="${DSH_HARNESS_BIN:-$HOME/deepseek-harness/apps/cli/lib/bin.js}" node "$HOME/dsh-kit/packages/dsh-agent-ui/bin/dsh-agent.mjs" "$@"\n' > ~/.local/bin/dsh-agent
 ln -sf ~/dsh-kit/packages/dsh-cron/bin/dsh-cron.mjs ~/.local/bin/dsh-cron
 ln -sf ~/dsh-kit/packages/dsh-telegram/bin/dsh-telegram.mjs ~/.local/bin/dsh-telegram
 chmod +x ~/.local/bin/dsh-agent ~/.local/bin/dsh-cron ~/.local/bin/dsh-telegram
@@ -84,7 +96,7 @@ git -C ~/.dsh-agent init 2>/dev/null; git -C ~/.dsh-agent config user.name  >/de
 git -C ~/.dsh-agent config user.email >/dev/null || git -C ~/.dsh-agent config user.email dsh-agent@localhost
 ```
 
-Verify: `dsh-agent --dump-config` composes; `node dsh-kit/tools/test-all.mjs` passes; `dsh-agent` opens (first run
+Verify: `dsh-agent --dump-config` composes; `dsh-agent-ui status` shows the HUD; `node dsh-kit/tools/test-all.mjs` passes; `dsh-agent` opens (first run
 shows the setup page — Telegram pairing is per-machine, the token is NOT in
 this archive); unit suites with `node tools/test.mjs` inside each
 `dsh-kit/packages/*`.
