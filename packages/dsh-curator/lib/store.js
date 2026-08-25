@@ -163,6 +163,46 @@ export async function markRun(home) {
 }
 
 /**
+ * The loop-guard break ledger (`$DSH_HOME/.loop-breaks.jsonl`), most recent
+ * last. One JSON line per break: `{at, sessionId, kind, why}`.
+ * @param {string} dshHome - the harness home (NOT the memory home).
+ * @returns {Promise<Array<{at:string, kind:string, why:string}>>}
+ */
+export async function loadBreaks(dshHome, limit = 50) {
+  try {
+    const lines = (await readFile(join(dshHome, '.loop-breaks.jsonl'), 'utf8')).split('\n').filter(l => l !== '')
+    return lines.slice(-limit).map(line => {
+      try { return JSON.parse(line) } catch { return null }
+    }).filter(entry => entry?.at)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Review activity: the mtime of each review marker, as "minutes ago".
+ * @param {string} memoryHome
+ * @returns {Promise<Array<{kind:string, agoMin:number}>>} only markers that exist.
+ */
+export async function loadReviewAges(memoryHome) {
+  const kinds = [
+    ['review', '.last-review'],
+    ['failure', '.last-failure-review'],
+    ['correction', '.last-correction-review'],
+    ['skill', '.last-skill-review'],
+    ['digest', '.last-digest-review'],
+  ]
+  const out = []
+  for (const [kind, file] of kinds) {
+    try {
+      const mtime = (await stat(join(memoryHome, file))).mtimeMs
+      out.push({ kind, agoMin: Math.max(0, Math.round((Date.now() - mtime) / 60000)) })
+    } catch { /* that review kind has never run */ }
+  }
+  return out
+}
+
+/**
  * Lesson efficacy, read back: how often each "Lesson: …" memory was actually
  * surfaced in a prompt (hits, logged by dsh-memory at assembly time) and how
  * often a turn STILL failed with that lesson on record (misses). A lesson

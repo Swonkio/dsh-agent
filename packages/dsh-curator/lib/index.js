@@ -16,17 +16,37 @@
  * @module dsh-curator
  */
 
+import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { curationPlan, renderReport, planIsEmpty, DEFAULTS } from './policy.js'
-import { loadUsage, noteOutcome, scanMemory, archiveSkill, restoreSkill, setPinned, markRun, loadLessonStats } from './store.js'
+import { curationPlan, renderReport, renderLoopReport, planIsEmpty, DEFAULTS } from './policy.js'
+import { loadUsage, noteOutcome, scanMemory, archiveSkill, restoreSkill, setPinned, markRun, loadLessonStats, loadBreaks, loadReviewAges } from './store.js'
 
 /** Stable Cordis plugin name. */
 export const name = 'dsh-curator'
 
-/** Reads the tool registry; subscribes to the session firehose. */
-export const inject = ['tools']
+/** Registers tools, a command, and a prompt section; reads the firehose. */
+export const inject = ['tools', 'commands', 'systemPrompt']
+
+/**
+ * Render the skill-outcome annotations for the prompt section. Pure.
+ * Only skills with enough decided uses are annotated — a rate over two
+ * tries is noise, and noise in the prompt costs every turn.
+ */
+export function renderSkillOutcomes(usage, options = {}) {
+  const minUses = options.minUsesForOutcome ?? 4
+  const rows = []
+  for (const [name, record] of Object.entries(usage ?? {})) {
+    if (record?.state === 'archived') continue
+    const decided = (record.wins ?? 0) + (record.losses ?? 0)
+    if (decided < minUses) continue
+    const wins = record.wins ?? 0
+    const mark = record.losses > wins ? '⚠' : '✓'
+    rows.push(`${mark} ${name} — ${wins}/${decided} turns succeeded`)
+  }
+  return rows.sort().join('\n')
+}
 
 /** Pull a skill identifier out of a tool call's argument JSON. */
 export function skillNameFrom(argumentsJson) {
@@ -151,4 +171,62 @@ export function apply(ctx, config = {}) {
       return { action: args.action, skill, detail: `"${skill}" is now ${pinned ? 'pinned — curation will leave it alone' : 'unpinned'}.` }
     },
   }))
+
+  // ── /loop — the learning-loop dashboard, zero model tokens ────────────────
+  ctx.commands.register({
+    name: 'loop',
+    description: 'show whether the learning loop is alive: lessons, reviews, skill outcomes, guard breaks',
+    handler: async () => {
+      const [stats, reviews, breaks, usage, digests] = await Promise.all([
+        loadLessonStats(memoryHome),
+        loadReviewAges(memoryHome),
+        loadBreaks(home),
+        loadUsage(skillsHome),
+        readdir(join(home, 'sessions', '.digests')).catch(() => []),
+      ])
+      const ineffective = Object.entries(stats)
+        .filter(([, s]) => s.hits >= (policy.minHitsForLessonVerdict ?? 3) && s.misses >= 1)
+        .map(([topic]) => ({ topic }))
+      const flagged = Object.values(usage).filter(r => r?.state !== 'archived'
+        && (r.wins ?? 0) + (r.losses ?? 0) >= (policy.minUsesForOutcome ?? 4)
+        && (r.losses ?? 0) / ((r.wins ?? 0) + (r.losses ?? 0)) >= (policy.failureRateAt ?? 0.4)).length
+      const text = renderLoopReport({
+        lessons: {
+          total: Object.keys(stats).length,
+          hits: Object.values(stats).reduce((sum, s) => sum + s.hits, 0),
+          misses: Object.values(stats).reduce((sum, s) => sum + s.misses, 0),
+          ineffective,
+        },
+        reviews,
+        skills: { tracked: Object.keys(usage).length, flagged },
+        breaks,
+        digests: digests.length,
+      })
+      return { kind: 'success', text }
+    },
+  })
+
+  // ── outcome-aware skill annotations in the prompt ──────────────────────────
+  // The catalog lists skills; only outcomes say which ones actually help.
+  // This lets the model prefer proven skills and brace for failing ones
+  // BEFORE loading them, instead of learning it the hard way each time.
+  // Refreshed on a timer, read at assembly: a prompt-section text() must be
+  // synchronous, so the file read happens off the hot path.
+  const outcomesCache = { at: 0, text: '' }
+  const refreshOutcomes = async () => {
+    const usage = await loadUsage(skillsHome)
+    const rows = renderSkillOutcomes(usage, policy)
+    outcomesCache.text = rows === '' ? '' : `# Skill track record (learned outcomes, min ${policy.minUsesForOutcome ?? 4} uses)\nPrefer the ✓ skills; treat ⚠ skills as suspect — their content is due for revision.\n${rows}`
+    outcomesCache.at = Date.now()
+  }
+  void refreshOutcomes()
+  const outcomesTimer = setInterval(() => { void refreshOutcomes() }, 60_000)
+  outcomesTimer.unref?.()
+  ctx.effect(() => () => clearInterval(outcomesTimer), 'dsh-curator: close outcomes timer')
+
+  ctx.systemPrompt.section({
+    name: 'curator:skill-outcomes',
+    order: 23,
+    text: () => outcomesCache.text,
+  })
 }

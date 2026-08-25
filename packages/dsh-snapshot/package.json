@@ -1,0 +1,10 @@
+{
+  "name": "dsh-snapshot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Durability for dsh-agent's learned state: keeps $DSH_HOME under git (secrets and bulky logs excluded), auto-commits when the user goes idle, and writes a restorable single-file bundle on demand.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT"
+}

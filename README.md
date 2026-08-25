@@ -52,7 +52,7 @@ Two design rules run through all of it:
 | `dsh-grounding` | behavior nudges that attack the *causes* of loops: **verify-before-conclude** (a stated root cause with no tool check behind it gets one rate-limited "go look" nudge) and **plan-on-multistep** (several tool calls in with no `todo_write` gets one "write a quick plan" nudge) |
 | **self-observation** | |
 | `dsh-prompt-audit` | the `/prompt` command: the assembled system prompt, section by section, with byte counts (sections, dynamic contexts, tool schemas). Zero model tokens |
-| `dsh-curator` | outcome-aware curation: tracks whether a skill actually *helped* the turn that loaded it, flags failing skills for revision (not retirement), archives the idle ones — recoverably, never deletes — and lists stale memories, unresolved contradictions, and lessons that are read but not followed |
+| `dsh-curator` | outcome-aware curation: tracks whether a skill actually *helped* the turn that loaded it, flags failing skills for revision (not retirement), archives the idle ones — recoverably, never deletes — and lists stale memories, unresolved contradictions, and lessons that are read but not followed. Also annotates skills in the prompt with their track record (✓/⚠), so proven skills get preferred *before* the failure, and provides the `/loop` dashboard |
 | `dsh-learning-eval` | the eval harness that measures whether any of this helps: runs a task set with memory on and off and reports the lift, with controls that keep the number honest |
 | **integrations** | |
 | `dsh-cron` | durable scheduled agentic tasks: a `cronjob` tool, a `/cron` command, and a crontab-driven runner that fires prompts through a one-shot profile |
@@ -62,7 +62,11 @@ Two design rules run through all of it:
 | `dsh-web-readable` | article extraction before markdown conversion — cuts a typical page from ~21k tokens to ~4k, headings/lists/links intact |
 | `dsh-web-searxng` | web search through a self-hosted SearXNG instance: free, keyless, local |
 
-Plus `profile/` — the `agent` profile template and the sandboxed `review` profile the learning loop spawns into (see below).
+Plus `profile/` — the `agent` profile template and the sandboxed `review` profile the learning loop spawns into (see below), and `.github/workflows/ci.yml` — the unit suites run on every push.
+
+**Compaction is not amnesia.** When auto-compaction fires at 80% of the window, a digest of the session is forced *before* the history is replaced, and a recap section injects this session's digest plus the most recent others into every prompt — so what compaction summarises away is still known.
+
+**The learned state is durable.** `dsh-snapshot` keeps `$DSH_HOME` under git — memory, skills, SOUL/USER, profiles, settings — with a refuse-first ignore list (credentials, session logs, caches, and the machine-specific plugin symlinks never commit). It auto-commits when you go idle, exposes `/snapshot`, and can write a restorable single-file bundle.
 
 ## The learning loop in `dsh-memory`
 
@@ -80,7 +84,7 @@ All opt-in from the profile config; all of it can run on the local endpoint.
 
 The review profile is the sandbox: no shell, no file mutation, no network, no subagents, no tool minting, no interaction. What remains is exactly the vocabulary of learning — write a memory, write a skill, search past sessions. The one file write it can make is `digest_save`, scoped to `sessions/.digests/` and security-scanned like memory. Unattended reviews read untrusted text; they must not be able to act on it.
 
-**They never fight your turn for the GPU.** Reviews share one queue: a second review within `coalesceWindowMs` (default 2 min) of a spawn *queues*, and the queue drains as **one combined model call** once you've been idle for `idleAfterMs` (default 5 min). On a single-slot backend, a queued-behind-your-turn review is invisible; a competing one is a stall.
+**They never fight your turn for the GPU.** Reviews share one queue: a second review within `coalesceWindowMs` (default 2 min) of a spawn *queues*, and the queue drains as **one combined model call** once you've been idle for `idleAfterMs` (default 5 min). With smart dispatch (on by default), a queued review first asks llama-swap's control plane whether the slot is actually generating — an idle slot takes the review immediately, a busy one defers. On a single-slot backend, a queued-behind-your-turn review is invisible; a competing one is a stall.
 
 **Recall that follows the task.** Every prompt assembly re-scores the `Lesson: …` lines against the *latest* user+assistant exchange — not the opening request — and surfaces the top few in a dedicated section above the memory index. As the task drifts mid-session, the recalled mistakes drift with it.
 
@@ -148,7 +152,7 @@ dsh-agent
 
 ## What you get at runtime
 
-**Commands:** `/memory` (audit the memory index, zero tokens) · `/prompt` (audit the assembled system prompt, zero tokens) · `/cron` (scheduled tasks) · `/model`, `/think`, `/backend`, `/cache` (from the surface).
+**Commands:** `/memory` (audit the memory index, zero tokens) · `/prompt` (audit the assembled system prompt, zero tokens) · `/loop` (the learning-loop dashboard: lessons, reviews, skill outcomes, guard breaks) · `/snapshot` (commit the learned state) · `/cron` (scheduled tasks) · `/model`, `/think`, `/backend`, `/cache` (from the surface).
 
 **Tools the agent gains:** `remember` (project memory) · `memory_save`/`memory_search`/`memory_edit`/`memory_forget` (user memory) · `skill_create` (procedural memory) · `curate` (curation report and skill lifecycle) · `cronjob` (scheduled tasks) · `tool_create`/`tool_forget` (the agent tool factory) · `computer_use` (optional) — plus the harness's own bash/read/write/edit/glob/grep/todo/web/skills set.
 

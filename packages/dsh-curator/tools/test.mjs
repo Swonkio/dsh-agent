@@ -9,9 +9,10 @@
 
 import {
   emptyRecord, recordOutcome, failureRate, classify, curationPlan,
-  planIsEmpty, shouldRun, renderReport, daysSince, DEFAULTS,
+  planIsEmpty, shouldRun, renderReport, renderLoopReport, daysSince, DEFAULTS,
 } from '../lib/policy.js'
-import { loadUsage, saveUsage, noteOutcome, archiveSkill, restoreSkill, setPinned, listSkills, scanMemory, loadLessonStats } from '../lib/store.js'
+import { renderSkillOutcomes } from '../lib/index.js'
+import { loadUsage, saveUsage, noteOutcome, archiveSkill, restoreSkill, setPinned, listSkills, scanMemory, loadLessonStats, loadBreaks, loadReviewAges } from '../lib/store.js'
 import { skillNameFrom } from '../lib/index.js'
 import { mkdtemp, mkdir, writeFile, readFile, access, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -210,6 +211,39 @@ ok('empty name attributes nothing', skillNameFrom('{"name":"  "}') === null)
   } finally {
     await rm(lessonHome, { recursive: true, force: true })
   }
+}
+
+// ── /loop dashboard + skill outcomes ────────────────────────────────────────
+{
+  const now = Date.parse('2026-08-25T12:00:00Z')
+  const report = renderLoopReport({
+    lessons: { total: 5, hits: 23, misses: 2, ineffective: [{ topic: 'vbox-log-first' }] },
+    reviews: [{ kind: 'failure', agoMin: 12 }, { kind: 'correction', agoMin: 140 }],
+    skills: { tracked: 4, flagged: 1 },
+    breaks: [
+      { at: '2026-08-24T10:00:00Z', kind: 'step', why: 'reached 61 steps' },
+      { at: '2026-08-25T09:30:00Z', kind: 'stream', why: 'same reasoning repeated 6×' },
+    ],
+    digests: 3,
+  }, now)
+  ok('loop report shows lessons, reviews with ages, skills, digests', report.includes('Lessons: **5**') && report.includes('failure 12m ago') && report.includes('correction 2h ago') && report.includes('Session digests: **3**'))
+  ok('breaks counted in a 7-day window', report.includes('**2**') && report.includes('same reasoning repeated'))
+  ok('ineffective lessons named', report.includes('vbox-log-first') && report.includes('curate report'))
+  ok('empty loop says so kindly', renderLoopReport({}, now).includes('Nothing has happened yet'))
+
+  const usage = {
+    'proven-skill': { wins: 6, losses: 1 },
+    'failing-skill': { wins: 1, losses: 4 },
+    'too-few-uses': { wins: 2, losses: 0 },
+    archived: { wins: 9, losses: 0, state: 'archived' },
+  }
+  const rows = renderSkillOutcomes(usage, { minUsesForOutcome: 4 })
+  ok('outcomes annotate proven and failing skills', rows.includes('✓ proven-skill — 6/7') && rows.includes('⚠ failing-skill — 1/5'))
+  ok('under-used and archived skills stay silent', !rows.includes('too-few-uses') && !rows.includes('archived'))
+  ok('no usage at all renders empty', renderSkillOutcomes({}) === '')
+  const noHome = join(tmpdir(), 'dsh-curator-nope-' + Date.now())
+  ok('loop-guard ledger reads and tolerates absence', Array.isArray(await loadBreaks(noHome)) && (await loadBreaks(noHome)).length === 0)
+  ok('review ages tolerate a bare home', (await loadReviewAges(noHome)).length === 0)
 }
 
 if (failures.length === 0) console.log(`${passed} passed, 0 failed`)

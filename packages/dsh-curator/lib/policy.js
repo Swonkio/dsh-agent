@@ -232,3 +232,48 @@ export function renderReport(plan, now = new Date()) {
 
   return `${lines.join('\n')}\n`
 }
+
+/**
+ * Render the /loop dashboard: one zero-token view of whether the learning
+ * loop is actually alive. Pure — every input is pre-read telemetry.
+ *
+ * @param {object} input - `{ lessons: {total, hits, misses, ineffective: []},
+ *   reviews: [{kind, agoMin}], skills: {tracked, flagged}, breaks: [{at, kind, why}],
+ *   digests: number, lastBreaksDays?: number }`.
+ * @returns {string} markdown.
+ */
+export function renderLoopReport(input, now = Date.now()) {
+  const lessons = input.lessons ?? { total: 0, hits: 0, misses: 0, ineffective: [] }
+  const reviews = input.reviews ?? []
+  const breaks = input.breaks ?? []
+  const weekMs = 7 * 86400000
+  const recent = breaks.filter(b => now - Date.parse(b.at) < weekMs)
+
+  const lines = ['# Learning loop', '']
+  lines.push(`Lessons: **${lessons.total}** on file · surfaced **${lessons.hits}×** · **${lessons.misses}** miss(es) after being surfaced.`)
+  if ((lessons.ineffective ?? []).length > 0) {
+    lines.push(`⚠ ${lessons.ineffective.length} not working: ${lessons.ineffective.map(l => l.topic).join(', ')} — see \`curate report\`.`)
+  }
+  lines.push('')
+  if (reviews.length === 0) {
+    lines.push('Reviews: none have run yet — enable the learning triggers in the profile.')
+  } else {
+    lines.push(`Reviews (last run): ${reviews.map(r => `${r.kind} ${formatAgo(r.agoMin)}`).join(' · ')}`)
+  }
+  lines.push(`Skills tracked: **${input.skills?.tracked ?? 0}**${input.skills?.flagged ? ` · ⚠ ${input.skills.flagged} failing (flagged for revision)` : ''}`)
+  lines.push(`Session digests: **${input.digests ?? 0}** written.`)
+  lines.push(`Loop-guard breaks: **${recent.length}** in the last 7 days.`)
+  for (const b of recent.slice(-3)) {
+    lines.push(`- ${b.kind}: ${String(b.why).slice(0, 100)}`)
+  }
+  if (lessons.total === 0 && reviews.length === 0 && recent.length === 0 && (input.digests ?? 0) === 0) {
+    lines.push('', '_Nothing has happened yet: the loop turns on with backgroundReview / learnFromFailures in the profile._')
+  }
+  return `${lines.join('\n')}\n`
+}
+
+/** "3 min ago" / "2 h ago" from a minute count. */
+function formatAgo(min) {
+  if (min < 60) return `${min}m ago`
+  return `${Math.round(min / 60)}h ago`
+}

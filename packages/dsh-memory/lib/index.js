@@ -19,7 +19,7 @@
  */
 
 import { readFile, writeFile, access, mkdir } from 'node:fs/promises'
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { conflictNotice } from 'dsh-epistemics'
@@ -331,6 +331,39 @@ export function correctionPrompt(userText, assistantText, capBytes = 3000) {
 // ── review dispatch: coalescing + idle drain ─────────────────────────────────
 
 /**
+ * Ask a llama-swap control plane whether the GPU is actually busy. Two
+ * fail-fast hops: `/running` finds the ready model and its `--port`, then
+ * the upstream llama-server's `/slots` reports per-slot `is_processing`.
+ * Any failure (remote provider, no swap, slow backend) resolves `undefined`
+ * — "unknown" must never become "go ahead and compete with the live turn".
+ *
+ * @param {string} swapUrl - the llama-swap base URL.
+ * @returns {Promise<boolean|undefined>} true = idle, false = busy, undefined = unknown.
+ */
+export async function probeBackendIdle(swapUrl) {
+  const attempt = async (url, as) => {
+    const abort = new AbortController()
+    const timer = setTimeout(() => abort.abort(), 500)
+    try {
+      const response = await fetch(url, { signal: abort.signal })
+      if (!response.ok) return undefined
+      return as === 'text' ? await response.text() : await response.json()
+    } catch {
+      return undefined
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  const running = await attempt(`${swapUrl}/running`, 'json')
+  const entry = running?.running?.find(row => row.state === 'ready')
+  const port = /--port (\d+)/.exec(entry?.cmd ?? '')?.[1]
+  if (port === undefined) return undefined
+  const slots = await attempt(`http://127.0.0.1:${port}/slots`, 'json')
+  if (!Array.isArray(slots) || slots.length === 0) return undefined
+  return slots.every(slot => slot?.is_processing !== true)
+}
+
+/**
  * Combine several queued review prompts into ONE review run. All review kinds
  * share the sandboxed profile and the same escape phrase, so one model call
  * can serve them; each sub-prompt keeps its self-contained instructions.
@@ -607,18 +640,20 @@ async function maybeSkillReviewOf(home, userText, procedure, reviewProvider, rev
 /**
  * Fire the detached DIGEST review: one sidecar paragraph per session so
  * cross-session recall does not mean replaying raw events. Same dispatch
- * machinery; its throttle is the loosest because a digest is never urgent.
+ * machinery; its throttle is the loosest because a digest is never urgent —
+ * unless `force`: compaction is about to DESTROY the detail, so a forced
+ * digest fires outside the throttle and past the minimum-exchange gate.
  */
-async function maybeDigestReviewOf(home, exchanges, sessionId, reviewProvider, reviewModel, reviewProfile, dispatch) {
+async function maybeDigestReviewOf(home, exchanges, sessionId, reviewProvider, reviewModel, reviewProfile, dispatch, { force = false } = {}) {
   try {
     const { stat } = await import('node:fs/promises')
     const marker = join(home, '.last-digest-review')
     let lastReviewMs = 0
     try { lastReviewMs = (await stat(marker)).mtimeMs } catch { /* never reviewed */ }
-    if (lastReviewMs > 0 && Date.now() - lastReviewMs < 30 * 60 * 1000) return
-    if (exchanges.length < 3) return
+    if (!force && lastReviewMs > 0 && Date.now() - lastReviewMs < 30 * 60 * 1000) return
+    if (exchanges.length < (force ? 1 : 3)) return
     dispatch({
-      kind: 'session digest',
+      kind: force ? 'compaction digest' : 'session digest',
       prompt: digestPrompt(exchanges, sessionId),
       markers: [marker], provider: reviewProvider, model: reviewModel, profile: reviewProfile,
     })
@@ -734,6 +769,12 @@ export function apply(ctx, config = {}) {
   const coalesceWindowMs = config.coalesceWindowMs ?? 2 * 60 * 1000
   const idleAfterMs = config.idleAfterMs ?? 5 * 60 * 1000
   const idleDrainCooldownMs = config.idleDrainCooldownMs ?? 10 * 60 * 1000
+  // Smart dispatch: before queueing a review, ask the local backend whether
+  // it is actually generating. llama-swap's upstream exposes per-slot
+  // is_processing; an idle slot takes the review immediately, a busy one
+  // defers to the queue. Only ever advisory — unknown means queue.
+  const smartDispatch = config.smartDispatch !== false
+  const swapUrl = config.swapUrl ?? process.env.DSH_TUI_SWAP_URL ?? 'http://127.0.0.1:8080'
   // Lesson efficacy: log every lesson the prompt actually surfaces, and mark a
   // miss when a turn later fails with that lesson on record — the curator
   // turns "surfaced N times, never helped" into a rewrite-or-retire plan.
@@ -742,6 +783,9 @@ export function apply(ctx, config = {}) {
   // exchanges into a sidecar digest file (via the review sandbox's
   // digest_save tool — it must be enabled in the REVIEW profile too).
   const digestSessions = config.digestSessions === true
+  // How many OTHER sessions' digests join the recap section (this session's
+  // own digest, when it exists, always leads).
+  const recapOthers = config.recapOthers ?? 2
   const digestReviewProvider = config.digestReviewProvider ?? reviewProvider
   const digestReviewModel = config.digestReviewModel ?? reviewModel
   // digest_save registers ONLY where a profile opts in (the review sandbox);
@@ -757,19 +801,37 @@ export function apply(ctx, config = {}) {
   // ── review dispatch state ─────────────────────────────────────────────────
   // The shared clock and queue every review kind dispatches through. A spawn
   // stamps lastSpawnAt; anything arriving inside the coalesce window queues
-  // for the idle drain instead of competing with the live turn.
+  // for the idle drain instead of competing with the live turn — unless the
+  // backend itself says it is FREE (smart dispatch): on llama-swap the
+  // upstream server exposes per-slot `is_processing`, so a queued review can
+  // jump the queue exactly when nobody is generating, and defer otherwise.
   const reviewState = { lastSpawnAt: 0, queue: [] }
+  let backendIdleCache = { at: 0, idle: false }
+  const backendIdle = async () => {
+    if (!smartDispatch) return false
+    if (Date.now() - backendIdleCache.at < 20_000) return backendIdleCache.idle
+    const idle = await probeBackendIdle(swapUrl)
+    backendIdleCache = { at: Date.now(), idle: idle === true }
+    return backendIdleCache.idle
+  }
   const dispatch = item => {
-    if (coalesceWindowMs > 0 && Date.now() - reviewState.lastSpawnAt < coalesceWindowMs) {
+    const spawn = () => { void spawnReviews([item], reviewState).catch(error => console.error(`dsh-memory: review spawn failed: ${error.message}`)) }
+    const enqueue = () => {
       // One queued instance per kind: a trigger whose marker only stamps at
       // spawn time (the digest, from its 30s idle ticks) would otherwise
       // queue a near-identical copy of itself on every re-check.
       if (reviewState.queue.some(queued => queued.kind === item.kind)) return
       reviewState.queue.push(item)
       if (reviewState.queue.length > 8) reviewState.queue.shift()
+    }
+    if (coalesceWindowMs > 0 && Date.now() - reviewState.lastSpawnAt < coalesceWindowMs) {
+      // Inside the window the queue is the default — but a backend that
+      // reports itself idle (multi-slot, or the turn finished since) can
+      // take the review NOW without delaying anyone.
+      void backendIdle().then(free => (free ? spawn() : enqueue()))
       return
     }
-    void spawnReviews([item], reviewState).catch(error => console.error(`dsh-memory: review spawn failed: ${error.message}`))
+    spawn()
   }
   // The idle drain: one cheap timer for the whole plugin. When the user has
   // been quiet past `idleAfterMs` and reviews are waiting, run them ALL as
@@ -861,6 +923,14 @@ export function apply(ctx, config = {}) {
           : (event.data?.error?.name ?? 'error')
         turnToolErrors.push({ name: callNames.get(block?.toolCallId) ?? 'tool', message })
       }
+      return
+    }
+    // Compaction is about to REPLACE the session's history with a summary —
+    // the detail is destroyed. Capture a digest FIRST (forced: past the
+    // throttle and the ≥3-exchange gate, one exchange already beats a
+    // summary), so the recap section can restore what compaction loses.
+    if (event?.type === 'compaction/start' && digestSessions && recentExchanges.length >= 1) {
+      void maybeDigestReviewOf(memoryHome, recentExchanges, session?.id ?? lastSessionId ?? 'unknown-session', digestReviewProvider, digestReviewModel, reviewProfile, dispatch, { force: true })
       return
     }
     if (event?.type === 'turn/end') {
@@ -1273,6 +1343,40 @@ export function apply(ctx, config = {}) {
   }
 
   // ── system prompt sections ───────────────────────────────────────────────
+  // The recap: this session's own digest (post-compaction it is the only
+  // record of what the summary replaced) plus the most recent other-session
+  // digests, so a new session starts knowing what was recently done.
+  // Synchronous like every section: digests are a handful of small files.
+  const recapText = () => {
+    if (!digestSessions) return ''
+    const dir = join(dshHomePath('sessions'), '.digests')
+    let files = []
+    try {
+      files = readdirSync(dir)
+        .filter(name => name.endsWith('.md'))
+        .map(name => ({ name, mtime: statSync(join(dir, name)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime)
+    } catch {
+      return ''
+    }
+    if (files.length === 0) return ''
+    const own = lastSessionId !== undefined ? files.find(f => f.name === `${lastSessionId}.md`) : undefined
+    const others = files.filter(f => f !== own).slice(0, recapOthers)
+    const chosen = [...(own !== undefined ? [own] : []), ...others]
+    if (chosen.length === 0) return ''
+    const parts = []
+    for (const file of chosen) {
+      try {
+        const body = readFileSync(join(dir, file.name), 'utf8')
+          .split('\n').filter(line => !line.startsWith('# ')).join('\n').trim()
+        if (body !== '') parts.push(truncateForPrompt(body, 600))
+      } catch { /* raced with a rewrite; skip */ }
+    }
+    if (parts.length === 0) return ''
+    return `# What was recently done (session digests${own !== undefined ? ', this session first' : ''}):\n${parts.join('\n\n')}`
+  }
+  ctx.systemPrompt.section({ name: 'memory:recap', order: 19, text: recapText })
+
   ctx.systemPrompt.section({
     name: 'memory:lessons',
     order: 18,

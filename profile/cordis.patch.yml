@@ -119,6 +119,8 @@
         # digestSessions: true
         # digestReviewProvider: local
         # digestReviewModel: your-local-model
+        # recapOthers: 2            # other-session digests in the recap section
+        # smartDispatch: true       # idle llama-swap slot => run reviews now
 
     # Loop circuit-breaker. The base bundle's repeat-tool-reminder only nudges
     # on BYTE-IDENTICAL repeated calls and never stops; it misses a turn that
@@ -151,6 +153,11 @@
     # counts. Zero model tokens.
     - id: prompt-audit
       name: 'dsh-prompt-audit'
+
+    # Durability for the learned state: git-backed $DSH_HOME (secrets and
+    # session logs excluded), idle auto-commit, /snapshot command.
+    - id: snapshot
+      name: 'dsh-snapshot'
 
 # ── OPTIONAL: drive a VirtualBox VM ─────────────────────────────────────────
 # Delete this whole block unless you actually have VMs. It needs VBoxManage on

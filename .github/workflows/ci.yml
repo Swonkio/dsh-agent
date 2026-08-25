@@ -1,0 +1,20 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # Suites that need harness peers (@deepseek-ai/*) or npm deps install
+      # them nowhere on a bare runner and are SKIPPED by design; the pure
+      # suites all run. See README → Testing.
+      - name: Run unit suites
+        run: node tools/test-all.mjs

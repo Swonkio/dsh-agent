@@ -39,6 +39,7 @@
  */
 
 import { writeFile } from 'node:fs/promises'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createUserMessage, isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
@@ -95,6 +96,21 @@ const SOURCE = { kind: 'plugin', plugin: 'dsh-loop-guard' }
 function recordBreak(sessionId, why, kind) {
   const line = JSON.stringify({ at: new Date().toISOString(), sessionId, kind, why })
   void writeFile(join(dshHomePath(), '.last-loop-break'), `${line}\n`).catch(() => {})
+  // The durable ledger the /loop dashboard counts from — the breadcrumb is
+  // consumed and deleted, so without this the dashboard would always read
+  // zero. Capped at 200 lines; best-effort like everything a break writes.
+  try {
+    const ledger = join(dshHomePath(), '.loop-breaks.jsonl')
+    const lines = readFileSync(ledger, 'utf8').split('\n').filter(l => l !== '').slice(-199)
+    lines.push(line)
+    writeFileSync(ledger, `${lines.join('\n')}\n`)
+  } catch {
+    // First break (no ledger yet) or a read race: this run simply is not
+    // counted; the next one will be.
+    try {
+      appendFileSync(join(dshHomePath(), '.loop-breaks.jsonl'), `${line}\n`)
+    } catch { /* telemetry only, never fail a break on it */ }
+  }
 }
 
 /** The focused re-drive queued after a break. `why` names what tripped. */
