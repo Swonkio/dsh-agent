@@ -96,5 +96,5 @@ for (const name of names.sort()) {
 }
 
 console.log(`\n${total} assertions passed · ${failed.length} suite(s) failed · ${skipped.length} skipped (deps not installed)`)
-if (skipped.length > 0) console.log('Skipped suites run in a full install; see RESTORE.md.')
+if (skipped.length > 0) console.log('Skipped suites run in a full install; see README.md → Testing.')
 process.exit(failed.length === 0 ? 0 : 1)
