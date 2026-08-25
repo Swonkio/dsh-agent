@@ -113,7 +113,7 @@ const daysAgo = n => new Date(NOW - n * DAY).toISOString()
 }
 
 // ── attribution ─────────────────────────────────────────────────────────────
-ok('skill name parsed from arguments', skillNameFrom('{"name":"deploy-clanker"}') === 'deploy-clanker')
+ok('skill name parsed from arguments', skillNameFrom('{"name":"deploy-service"}') === 'deploy-service')
 ok('alternate key parsed', skillNameFrom('{"skill":"x"}') === 'x')
 ok('unparseable arguments attribute nothing', skillNameFrom('not json') === null)
 ok('empty name attributes nothing', skillNameFrom('{"name":"  "}') === null)

@@ -19,8 +19,8 @@ const ok = (name, cond, detail = '') => { cond === true ? (passed += 1) : failur
 const conflicts = (a, b) => conflictScore(a, b).score >= CONFLICT_AT
 
 // ── tokenizing ──────────────────────────────────────────────────────────────
-ok('claimOf strips the index prefix', claimOf('- Node: runs jito-solana') === 'Node runs jito-solana')
-ok('claimOf passes a bare line through', claimOf('runs jito') === 'runs jito')
+ok('claimOf strips the index prefix', claimOf('- Node: runs envoy-proxy') === 'Node runs envoy-proxy')
+ok('claimOf passes a bare line through', claimOf('runs envoy') === 'runs envoy')
 ok('contentTerms drops stopwords', !contentTerms('the node is a box').has('the'))
 ok('quantities finds identifiers', quantities('uses Q8_0 at port 8080').has('q8_0'))
 ok('quantities ignores bare words', !quantities('uses quant').has('uses'))

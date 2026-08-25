@@ -3,8 +3,8 @@
  *
  * The memory store already refuses DUPLICATES: a fact too similar to one on
  * file is dropped. The failure it cannot see is the opposite one — a fact that
- * is similar in SUBJECT but opposite in CLAIM. "the node runs jito-solana" and
- * "the node runs stock agave" are only ~60% similar, so both survive, and from
+ * is similar in SUBJECT but opposite in CLAIM. "the node runs envoy-proxy" and
+ * "the node runs stock nginx" are only ~60% similar, so both survive, and from
  * then on every session is handed both and believes whichever it reads first.
  * A duplicate wastes a line; a contradiction corrupts the model of the world,
  * and it persists, which is exactly what makes it worse than having no memory.
@@ -103,7 +103,7 @@ export function claimOf(line) {
  * Is this term distinctive enough to identify a subject?
  *
  * There is no corpus here to compute IDF against, so distinctiveness is
- * approximated by shape: compound identifiers (jito-solana, no-port-check,
+ * approximated by shape: compound identifiers (envoy-proxy, grpc-web,
  * q8_0), anything carrying a digit, and longer words are the tokens that name
  * a specific thing. Short common verbs like "runs" are not. This is the
  * difference between two lines being ABOUT the same thing and merely sharing
