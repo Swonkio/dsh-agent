@@ -217,3 +217,29 @@ node dsh-kit/packages/dsh-learning-eval/tools/eval.mjs --repeats 3 --out report.
 
 Each arm gets a throwaway `$DSH_HOME`, so the eval can never read or write your
 real memory.
+
+## Running the tests
+
+```
+node dsh-kit/tools/test-all.mjs
+```
+
+Works from a bare clone. It links in-repo sibling packages itself (a dependency
+that lives in the same repo should not need a manual step) and reports suites
+that need the harness peers as **skipped** rather than failed — a missing
+install is a setup state, not a broken test, and conflating the two hides real
+failures. In a full install all suites run:
+
+```
+346 assertions passed · 0 suite(s) failed · 0 skipped
+```
+
+The review sandbox has its own check, since it is a security boundary rather
+than a behaviour:
+
+```
+DSH_HOME=~/.dsh-agent node dsh-kit/tools/test-review-sandbox.mjs
+```
+
+It composes the `review` profile for real and fails if anything that can
+execute, write, fetch or delegate has reappeared.
