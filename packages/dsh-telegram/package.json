@@ -1,0 +1,12 @@
+{
+  "name": "dsh-telegram",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dsh-telegram: a Telegram gateway for dsh-agent — long-poll the Bot API, run each message through a one-shot agent turn with per-chat session continuity, and drain an outbox cron jobs can deliver to.",
+  "type": "module",
+  "main": "lib/gateway.js",
+  "exports": { ".": "./lib/gateway.js", "./package.json": "./package.json" },
+  "bin": { "dsh-telegram": "bin/dsh-telegram.mjs" },
+  "license": "MIT",
+  "peerDependencies": {}
+}

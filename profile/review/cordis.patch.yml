@@ -1,0 +1,120 @@
+# The review profile: the sandbox the self-improvement pass runs in.
+#
+# The background review is UNATTENDED and its input is untrusted — it reads
+# whatever the last exchange contained, which may include web pages, file
+# contents, or command output carrying injected instructions. A pass like that
+# must not be able to act on them. So this profile is defined by what it
+# CANNOT do: no shell, no file writes, no network, no subagents, no scheduling,
+# no minting of new tools.
+#
+# What remains is exactly the vocabulary of learning: record a memory, revise
+# the user model, write a skill, and search past sessions to check whether
+# something is already known. A prompt injection that reaches this pass can at
+# worst write a wrong memory — which the epistemics layer flags on the way in
+# and the curator can retire — instead of running a command.
+#
+# WHAT IS DISABLED HERE, AND WHAT IS NOT. The entries below are TOOLS: the
+# things the model can actually invoke. The services underneath them (shell,
+# approval, goals) stay enabled on purpose. Disabling a service breaks every
+# plugin that depends on it — dsh-permission-presets waits on `shell` and
+# `approval`, dsh-command-goal on `goals`, and the tree then refuses to load —
+# and disabling `approval` in particular would remove the permission gate
+# rather than tighten it. Capability is decided by what is REGISTERED for the
+# model to call, so that is the layer to cut. Verified at runtime by
+# tools/test-review-sandbox.mjs, which composes this profile and fails if
+# anything executable reappears.
+
+# ── deny: execution ─────────────────────────────────────────────────────────
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+
+# ── deny: file mutation ─────────────────────────────────────────────────────
+# The memory, user-model and skill tools write through their own stores, which
+# are scoped to $DSH_HOME; the general-purpose editors are not.
+- id: tool-str-replace-editor
+  disabled: true
+- id: tool-fs
+  disabled: true
+- id: tool-fs-search
+  disabled: true
+
+# ── deny: network ───────────────────────────────────────────────────────────
+# A review that can fetch is a review that can exfiltrate what it just read.
+- id: tool-web
+  disabled: true
+
+# ── deny: delegation, scheduling, tool minting ──────────────────────────────
+# A subagent would escape this sandbox by spawning an unsandboxed profile; a
+# created tool is executable later, and an unattended pass should not mint one.
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-fork
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-subagent-list-agents
+  disabled: true
+- id: tool-subagent-report
+  disabled: true
+- id: tool-jobs
+  disabled: true
+- id: tool-ralph
+  disabled: true
+- id: tool-workflow
+  disabled: true
+
+# ── deny: interaction ───────────────────────────────────────────────────────
+# Nobody is watching. A question would hang the pass until its timeout.
+- id: tool-ask-user
+  disabled: true
+- id: tool-todo
+  disabled: true
+- id: tool-goal
+  disabled: true
+- id: plan-mode
+  disabled: true
+
+# ── keep, and size for the job ──────────────────────────────────────────────
+- id: session-title-llm
+  disabled: true
+
+- id: compaction-basic
+  config:
+    thresholdRatio: 0.8
+    maxTokens: 24576
+
+# The review reads one clipped exchange, not a whole conversation, so its
+# prompt is small and prefill is cheap — the reason we can afford a separate
+# profile (and its separate prompt prefix) instead of inheriting the parent's
+# runtime the way Hermes must for its full-snapshot replay.
+- id: session-query-sqlite
+  config:
+    path: !!js dshHomePath('session-query.sqlite')
+    openAt: first-search
+
+- insert:
+    - id: tool-session-query
+      name: '@deepseek-ai/dsh-tool-session-query'
+
+    - id: tool-remember
+      name: 'dsh-memory'
+      config:
+        filename: QWEN.md
+        indexCapBytes: 8192
+        # The ONE file write this sandbox allows: the session-digest review's
+        # output channel (writes only under $DSH_HOME/sessions/.digests/,
+        # security-scanned like memory). Every other review trigger stays off
+        # in this profile — no recursion.
+        enableDigestSave: true
+
+    - id: dsh-user-model
+      name: 'dsh-user-model'
+      config:
+        maxBytes: 2048
+
+    - id: dsh-soul
+      name: 'dsh-soul'
+      config:
+        maxBytes: 2048

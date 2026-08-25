@@ -1,0 +1,10 @@
+{
+  "name": "dsh-learning-eval",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Measures whether the learning loop actually helps: runs a task set with memory on and off and reports the lift, with the controls that keep the number honest.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT"
+}

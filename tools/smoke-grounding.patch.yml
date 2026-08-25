@@ -1,0 +1,8 @@
+# Smoke-test overlay: insert the NEW dsh-grounding plugin into the headless
+# profile, then run a one-shot prompt. If apply() throws, profile load fails.
+- insert:
+    - id: grounding
+      name: 'dsh-grounding'
+      config:
+        verifyEvery: 6
+        planStep: 5

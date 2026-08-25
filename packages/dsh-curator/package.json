@@ -1,0 +1,11 @@
+{
+  "name": "dsh-curator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Outcome-aware curation for dsh skills and memory: tracks whether a skill actually helped, retires what rots, flags what fails, and never deletes.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT",
+  "peerDependencies": { "dsh-epistemics": "*" }
+}

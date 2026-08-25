@@ -1,0 +1,41 @@
+# The dsh-agent bundle patch: the terminal surface over the dsh-base layer.
+# Applied after dsh-base's insert; rows here override base rows by id, with
+# the profile's own cordis.patch.yml and any --patch overlays still to come.
+#
+# Single-session: the base agent plane stays exactly as composed (unlike the
+# web bundle, which disables its rows behind per-session presets). This layer
+# adds the persona, the ask-user tool, Code Mode's runtime, and the two
+# surface rows: the cmdline flags provider and the runner that owns stdin.
+
+- id: system-prompt
+  config:
+    persona: >-
+      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+
+# The shared module-reload HMR row stays off; the launcher's watch-only
+# fallback still keeps the user patch layers live until the run exits.
+- id: hmr
+  disabled: true
+
+- id: tools
+  config:
+    # Same temporary process-wide Code Mode opt-in as the other surfaces.
+    mode: !!js process.env.DSH_TOOLS_MODE
+
+- insert:
+    - id: code-runtime
+      name: '@deepseek-ai/dsh-code-runtime-worker-thread'
+
+    # The model-facing ask_user_question tool over the base user-questions
+    # service; the agent runner answers it from the terminal.
+    - id: tool-ask-user
+      name: '@deepseek-ai/dsh-tool-ask-user'
+
+    # Parses this surface's flags and publishes them as the `agentStartup` service.
+    - id: agent-startup
+      name: 'dsh-agent/startup'
+
+    # The runner: one agent created or resumed in process, the durable session
+    # feed rendered to scrollback, stdin owned until the user exits.
+    - id: agent-runner
+      name: 'dsh-agent'

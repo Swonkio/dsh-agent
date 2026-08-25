@@ -19,7 +19,7 @@ echo "harness: $HARNESS"
 
 KIT="$(cd "$(dirname "$0")" && pwd)"
 SCOPE="$HOME/.dsh/profiles/node_modules"
-mkdir -p "$SCOPE/@deepseek-ai" "$HOME/.dsh/profiles/tui"
+mkdir -p "$SCOPE/@deepseek-ai" "$HOME/.dsh/profiles/agent"
 
 # Out-of-tree plugins are resolved by name from the profile's flat node_modules.
 for p in "$KIT"/packages/*; do
@@ -40,7 +40,7 @@ done
 FETCH="$HARNESS/packages/web/web-fetch-http"
 [ -d "$FETCH" ] && ln -sfn "$FETCH" "$SCOPE/@deepseek-ai/dsh-web-fetch-http" && echo "  linked dsh-web-fetch-http"
 
-PROFILE="$HOME/.dsh/profiles/tui/cordis.patch.yml"
+PROFILE="$HOME/.dsh/profiles/agent/cordis.patch.yml"
 if [ -e "$PROFILE" ]; then
   echo "kept existing $PROFILE (template is at $KIT/profile/cordis.patch.yml)"
 else
@@ -48,15 +48,28 @@ else
   echo "wrote $PROFILE — EDIT IT before first run"
 fi
 
+# The sandboxed review profile the self-learning loop spawns its one-shot
+# reviews in: same node_modules scope, no shell/fs/net/subagents (see
+# profile/review/cordis.patch.yml for the rationale). Learning is opt-in in
+# the agent profile; this just makes it available from the start.
+mkdir -p "$HOME/.dsh/profiles/review"
+REVIEW="$HOME/.dsh/profiles/review/cordis.patch.yml"
+if [ ! -e "$REVIEW" ]; then
+  cp "$KIT/profile/review/package.json" "$HOME/.dsh/profiles/review/"
+  cp "$KIT/profile/review/cordis.yml" "$HOME/.dsh/profiles/review/"
+  cp "$KIT/profile/review/cordis.patch.yml" "$REVIEW"
+  echo "wrote $REVIEW (sandboxed review profile)"
+fi
+
 mkdir -p "$HOME/.local/bin"
-cat > "$HOME/.local/bin/dsh-tui" <<LAUNCH
+cat > "$HOME/.local/bin/dsh-agent" <<LAUNCH
 #!/bin/sh
-exec node "$HARNESS/apps/cli/lib/bin.js" --profile tui "\$@"
+exec node "$HARNESS/apps/cli/lib/bin.js" --profile agent "\$@"
 LAUNCH
-chmod +x "$HOME/.local/bin/dsh-tui"
+chmod +x "$HOME/.local/bin/dsh-agent"
 
 echo
 echo "Installed. Next:"
 echo "  1. point ~/.dsh/settings.yaml at your model endpoint (see README)"
 echo "  2. edit $PROFILE"
-echo "  3. run: dsh-tui   (ensure ~/.local/bin is on PATH)"
+echo "  3. run: dsh-agent   (ensure ~/.local/bin is on PATH)"

@@ -1,0 +1,13 @@
+{
+  "name": "dsh-profile-review",
+  "private": true,
+  "dependencies": {},
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "dsh-agent"
+      ]
+    }
+  }
+}

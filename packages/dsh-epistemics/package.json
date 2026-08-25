@@ -1,0 +1,10 @@
+{
+  "name": "dsh-epistemics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Truth maintenance for dsh memory: contradiction detection, provenance, confirmation counts and staleness — so a wrong memory is caught rather than replayed forever.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT"
+}

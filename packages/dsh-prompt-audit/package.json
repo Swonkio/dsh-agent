@@ -1,0 +1,10 @@
+{
+  "name": "dsh-prompt-audit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A /prompt command for dsh-agent: shows the assembled system prompt section by section with byte counts, plus dynamic contexts and tool schema weight — zero model tokens.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT"
+}

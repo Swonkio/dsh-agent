@@ -1,0 +1,15 @@
+{
+  "name": "dsh-user-model",
+  "version": "0.1.0",
+  "private": true,
+  "description": "USER.md for dsh: a self-revising model of the user, injected every session and maintained by the agent's background review — the deepening 'who you are' layer.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-home-paths": "*",
+    "@deepseek-ai/dsh-tools": "*"
+  }
+}

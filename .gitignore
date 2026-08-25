@@ -1,3 +1,5 @@
 node_modules/
 *.bak-*
 *.tar.gz
+IMPROVEMENTS-PLAN.md
+packages/dsh-tui/

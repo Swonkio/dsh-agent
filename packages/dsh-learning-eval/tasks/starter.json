@@ -1,0 +1,39 @@
+[
+  {
+    "id": "recall-port",
+    "note": "A bare fact the model cannot guess. If the control scores above zero, the term is too guessable — pick a rarer value.",
+    "memories": [
+      { "topic": "Inference server", "summary": "the local inference server listens on port 7431 and is bound to loopback only" }
+    ],
+    "prompt": "What port does my local inference server listen on? Answer with just the number.",
+    "expect": { "includes": ["7431"] }
+  },
+  {
+    "id": "recall-preference",
+    "note": "Preferences are the most common thing a user states once and expects to hold forever.",
+    "memories": [
+      { "topic": "Review style", "summary": "the user wants patches reviewed as a unified diff, never as prose descriptions of the change" }
+    ],
+    "prompt": "How do I want you to present a code review to me? One short sentence.",
+    "expect": { "includes": ["diff"], "excludes": ["prose"] }
+  },
+  {
+    "id": "supersede-stale",
+    "note": "The failure this eval exists to catch: two versions of a fact on file and the agent stating the dead one. The excluded term is the old value.",
+    "memories": [
+      { "topic": "Deploy target", "summary": "deploys used to go to the staging-west cluster" },
+      { "topic": "Deploy target current", "summary": "deploys now go to the prod-east cluster; staging-west was decommissioned and must not be used" }
+    ],
+    "prompt": "Which cluster do my deploys go to? Name exactly one.",
+    "expect": { "includes": ["prod-east"], "excludes": ["staging-west"] }
+  },
+  {
+    "id": "recall-constraint",
+    "note": "An operational constraint whose violation is expensive — the class of memory that most justifies the loop existing.",
+    "memories": [
+      { "topic": "Database migrations", "summary": "migrations must never run during market hours; the writer lock stalls the order pipeline" }
+    ],
+    "prompt": "Is there any time I should avoid running database migrations? Answer briefly.",
+    "expect": { "includes": ["market hours"] }
+  }
+]

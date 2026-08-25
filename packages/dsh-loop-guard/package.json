@@ -1,0 +1,10 @@
+{
+  "name": "dsh-loop-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Loop circuit-breaker for dsh-agent: caps runaway multi-step turns and interrupts circular/over-long single-step reasoning, then auto-recovers a bounded number of times before handing control back.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "license": "MIT"
+}
