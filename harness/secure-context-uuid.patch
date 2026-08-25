@@ -1,6 +1,6 @@
-From 1edafa093ae1171112c719243e2a388e500dd527 Mon Sep 17 00:00:00 2001
+From 8e2fd201b42683420bc671bd9779362eb4284a8f Mon Sep 17 00:00:00 2001
 From: agent <monerofan@tuta.io>
-Date: Tue, 25 Aug 2026 16:37:45 +0000
+Date: Tue, 25 Aug 2026 16:47:51 +0000
 Subject: [PATCH] replace SecureContext-gated crypto.randomUUID with
  getRandomValues helper
 MIME-Version: 1.0
@@ -26,11 +26,11 @@ the helper generates RFC 4122 v4 UUIDs on insecure origins and in Node.
 
 diff --git a/packages/client/ui-conversation/src/client/random-uuid.ts b/packages/client/ui-conversation/src/client/random-uuid.ts
 new file mode 100644
-index 0000000000..d5169d0952
+index 0000000000..d99376a7e4
 --- /dev/null
 +++ b/packages/client/ui-conversation/src/client/random-uuid.ts
 @@ -0,0 +1,19 @@
-+/** Secure-context-independent UUID generation for browser-only draft ids. */
++/** Secure-context-independent UUID generation for message identity. */
 +
 +/**
 + * Generate an RFC 4122 version 4 UUID without requiring a secure context.
@@ -50,18 +50,18 @@ index 0000000000..d5169d0952
 +  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 +}
 diff --git a/packages/client/ui-conversation/src/client/service.ts b/packages/client/ui-conversation/src/client/service.ts
-index 198eee5f0f..e0fd5f6753 100644
+index a37816472c..121e68bab8 100644
 --- a/packages/client/ui-conversation/src/client/service.ts
 +++ b/packages/client/ui-conversation/src/client/service.ts
-@@ -15,6 +15,7 @@ import type { Context } from '@deepseek-ai/cordis'
- import type { ISessions, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
- import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
- import type { ComposerAttachment } from './contract/slots.ts'
+@@ -8,6 +8,7 @@
+  * private fields bypass that rebinding.
+  */
+ import { Service } from '@deepseek-ai/cordis'
 +import { randomUuid } from './random-uuid.ts'
- import type { QueueAction, QueueItemId } from './contract/queue.ts'
- import type { ComposerBlocks } from './input/blocks.ts'
- import type { DraftAttachmentId, SessionInputResolver } from './input/contract.ts'
-@@ -62,7 +63,7 @@ export interface IConversation {
+ import type { Context } from '@deepseek-ai/cordis'
+ // Type-only imports: a plugin-to-plugin value import is a bundle purity
+ // error, so scope resolution goes through the sessions service (scopeOf
+@@ -63,7 +64,7 @@ export interface IConversation {
  function browserDraftAttachment(file: File): ComposerAttachment {
    return {
      kind: 'image',
@@ -96,11 +96,11 @@ index 70e3ece58f..1c254d6660 100644
    /**
 diff --git a/packages/host/apiproxy/src/fetch/random-uuid.ts b/packages/host/apiproxy/src/fetch/random-uuid.ts
 new file mode 100644
-index 0000000000..278063e0e7
+index 0000000000..d99376a7e4
 --- /dev/null
 +++ b/packages/host/apiproxy/src/fetch/random-uuid.ts
 @@ -0,0 +1,19 @@
-+/** Secure-context-independent UUID generation for wire correlation. */
++/** Secure-context-independent UUID generation for message identity. */
 +
 +/**
 + * Generate an RFC 4122 version 4 UUID without requiring a secure context.

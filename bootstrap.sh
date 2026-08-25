@@ -1,15 +1,21 @@
 #!/usr/bin/env sh
-# dsh kit installer.
+# dsh kit installer — plug and play.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Swonkio/dsh-agent/main/bootstrap.sh | sh
 #
 # Runs under `sh` piped from curl, so it never reads stdin — stdin IS the
 # script. Every choice is an environment variable instead:
 #
-#   DSH_HARNESS=/path   use an existing deepseek-harness instead of cloning
-#   DSH_BUILD=1         clone AND build the harness if it is missing
+#   DSH_HARNESS=/path   use this deepseek-harness checkout (skip detection)
 #   DSH_REPO=owner/repo pull the kit from a different fork
 #   DSH_REF=main        branch or tag to install
+#
+# With no DSH_HARNESS, the script DETECTS an existing harness in the usual
+# places and, when there is none, says "Downloading Deepseek-Harness", clones
+# https://github.com/deepseek-ai/deepseek-harness itself, applies the kit's
+# harness patches, and builds it — a large, one-time download; later installs
+# reuse the checkout. A checkout that exists but was never built gets built,
+# not re-cloned.
 set -eu
 
 REPO=${DSH_REPO:-Swonkio/dsh-agent}
@@ -46,40 +52,57 @@ rm -rf "$PREFIX/kit"
 cp -r "$KIT" "$PREFIX/kit"
 
 # ── the harness ─────────────────────────────────────────────────────────────
+
+# Build (and patch) a harness checkout in place. Local harness patches ride
+# in the kit: harness/*.patch, applied BEFORE the build so the built output
+# carries them. Kept in step with the twin function in install.sh.
+build_harness() {
+  h=$1
+  for patch in "$PREFIX/kit"/harness/*.patch; do
+    [ -e "$patch" ] || continue
+    if ( cd "$h" && git apply --check "$patch" 2>/dev/null ); then
+      ( cd "$h" && git apply "$patch" )
+      say "applied harness patch: $(basename "$patch")"
+    fi
+  done
+  # The harness builds with pnpm. It ships with Node as corepack, so a
+  # machine without it can still get there without manual steps.
+  command -v pnpm >/dev/null 2>&1 || {
+    say "enabling pnpm"
+    corepack enable pnpm >/dev/null 2>&1 || npm install -g pnpm >/dev/null 2>&1 \
+      || die "pnpm is required to build the harness; install it with: npm install -g pnpm"
+  }
+  ( cd "$h" && pnpm install && pnpm run build ) \
+    || die "harness build failed — see the output above, fix what it names, and re-run this installer"
+}
+
+# Plug and play: an explicit path wins, then a BUILT checkout in the usual
+# places, then a cloned-but-unbuilt one (build, do not re-clone), else
+# download it now.
 HARNESS=${DSH_HARNESS:-}
 if [ -z "$HARNESS" ]; then
-  for guess in "$HOME/deepseek-harness" "$PREFIX/deepseek-harness"; do
+  for guess in "$HOME/deepseek-harness" "$PREFIX/deepseek-harness" "$PWD/../deepseek-harness"; do
     [ -f "$guess/apps/cli/lib/bin.js" ] && HARNESS=$guess && break
   done
 fi
 if [ -z "$HARNESS" ]; then
-  if [ "${DSH_BUILD:-0}" = "1" ]; then
-    need pnpm
-    say "cloning deepseek-harness (this is large, and the build takes a while)"
-    [ -d "$PREFIX/deepseek-harness" ] || git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$PREFIX/deepseek-harness"
-    # Local harness patches ride in the kit: harness/*.patch, applied to a
-    # fresh clone BEFORE the build so the built output carries them.
-    for patch in "$PREFIX/kit"/harness/*.patch; do
-      [ -e "$patch" ] || continue
-      if ( cd "$PREFIX/deepseek-harness" && git apply --check "$patch" 2>/dev/null ); then
-        ( cd "$PREFIX/deepseek-harness" && git apply "$patch" )
-        say "applied harness patch: $(basename "$patch")"
-      fi
-    done
-    ( cd "$PREFIX/deepseek-harness" && pnpm install && pnpm run build )
-    HARNESS=$PREFIX/deepseek-harness
-  else
-    say ""
-    say "No deepseek-harness found. It is a separate project (MIT) and must be"
-    say "built once before this kit can run. Either:"
-    say ""
-    say "  DSH_BUILD=1 curl -fsSL https://raw.githubusercontent.com/$REPO/$REF/bootstrap.sh | sh"
-    say ""
-    say "to have this script clone and build it, or point at your own copy:"
-    say ""
-    say "  DSH_HARNESS=/path/to/deepseek-harness curl -fsSL ... | sh"
-    exit 1
-  fi
+  for guess in "$HOME/deepseek-harness" "$PREFIX/deepseek-harness" "$PWD/../deepseek-harness"; do
+    if [ -f "$guess/package.json" ] && [ -d "$guess/packages/llm" ]; then
+      say "found an unbuilt deepseek-harness at $guess — building it (this takes a while)"
+      build_harness "$guess"
+      HARNESS=$guess
+      break
+    fi
+  done
+fi
+if [ -z "$HARNESS" ]; then
+  HARNESS="$PREFIX/deepseek-harness"
+  say ""
+  say "Downloading Deepseek-Harness"
+  say "  https://github.com/deepseek-ai/deepseek-harness"
+  say "a large one-time clone; the build takes a while. Later installs reuse it."
+  [ -d "$HARNESS" ] || git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$HARNESS"
+  build_harness "$HARNESS"
 fi
 say "harness: $HARNESS"
 

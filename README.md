@@ -92,32 +92,26 @@ The review profile is the sandbox: no shell, no file mutation, no network, no su
 
 ## Prerequisites
 
-1. **Node 22.19+ or 24+**
-2. **A built deepseek-harness checkout** (MIT). Clone it and follow its own build steps: `pnpm install && pnpm run build`. The kit carries one small harness patch ([`harness/secure-context-uuid.patch`](harness/secure-context-uuid.patch) — `crypto.randomUUID` is `[SecureContext]`-gated, which breaks the harness's web UI on plain-HTTP LAN origins). Installers apply it automatically: `DSH_BUILD=1` clones, patches, then builds; `install.sh` patches an existing checkout and tells you to rebuild. The terminal surface runs fine without it.
-3. **An OpenAI-compatible endpoint.** Anything that speaks `/v1/chat/completions` — llama.cpp's `llama-server`, llama-swap, vLLM, ollama, or a hosted API.
+1. **Node 22.19+ or 24+**, `git`, `curl` — nothing else. `pnpm` is enabled automatically via corepack when the harness must be built.
+2. **An OpenAI-compatible endpoint.** Anything that speaks `/v1/chat/completions` — llama.cpp's `llama-server`, llama-swap, vLLM, ollama, or a hosted API.
+
+**The harness is not a manual prerequisite.** The installer detects an existing [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT) checkout — `DSH_HARNESS`, `~/deepseek-harness`, `~/.local/share/dsh-agent/deepseek-harness`, or one next to your current directory — and when there is none it says `Downloading Deepseek-Harness`, clones it, applies the kit's harness patch ([`harness/secure-context-uuid.patch`](harness/secure-context-uuid.patch) — fixes `crypto.randomUUID` being `[SecureContext]`-gated, which breaks the harness's web UI on plain-HTTP LAN origins), and builds it. A checkout that exists but was never built gets built, not re-cloned. It is a large one-time download; later installs reuse the checkout.
 
 ## Install
 
 One line, if you already have a built harness:
 
 ```sh
-DSH_HARNESS=/path/to/deepseek-harness \
-  curl -fsSL https://raw.githubusercontent.com/Swonkio/dsh-agent/main/bootstrap.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Swonkio/dsh-agent/main/bootstrap.sh | sh
 ```
 
-Or let it clone and build the harness for you (large download, slow build, needs `pnpm`):
+The bootstrap never reads stdin — piped to `sh`, stdin *is* the script — so every option is an environment variable: `DSH_HARNESS` (use a specific harness checkout and skip detection), `DSH_REPO`/`DSH_REF` (install the kit from a different fork or branch), `DSH_PREFIX` (install location).
 
-```sh
-DSH_BUILD=1 curl -fsSL https://raw.githubusercontent.com/Swonkio/dsh-agent/main/bootstrap.sh | sh
-```
-
-The bootstrap never reads stdin — piped to `sh`, stdin *is* the script — so every option is an environment variable: `DSH_HARNESS` (use an existing harness), `DSH_BUILD` (clone+build if missing), `DSH_REPO`/`DSH_REF` (different fork or branch), `DSH_PREFIX` (install location).
-
-From a clone instead:
+From a clone instead — `install.sh` has the same detect-or-download behavior:
 
 ```sh
 git clone https://github.com/Swonkio/dsh-agent && cd dsh-agent
-DSH_HARNESS=/path/to/deepseek-harness ./install.sh
+./install.sh
 ```
 
 `install.sh` links every kit package into `~/.dsh/profiles/node_modules/`, writes the `agent` profile patch and the sandboxed `review` profile, and drops a `dsh-agent` launcher into `~/.local/bin`. `DSH_HOME` relocates the whole data dir if you don't want `~/.dsh`.
