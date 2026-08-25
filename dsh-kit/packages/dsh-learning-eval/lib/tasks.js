@@ -37,6 +37,18 @@ export function validateTask(task) {
       throw new Error(`task ${task.id}: each memory needs a topic and a summary`)
     }
   }
+  // A term the correct answer may legitimately contain must not also be
+  // forbidden. The subtle form: the agent echoes a phrase from a memory it just
+  // read, and that phrase is on the exclude list, so a RIGHT answer scores
+  // zero. This throws on exactly the bug that produced two false zeros in the
+  // first real run — an exclude term that appears verbatim in the task's own
+  // seeded memory.
+  const memoryText = task.memories.map(memory => memory.summary.toLowerCase()).join(' ')
+  for (const term of excludes) {
+    if (memoryText.includes(String(term).toLowerCase())) {
+      throw new Error(`task ${task.id}: exclude term ${JSON.stringify(term)} appears in the task's own memory, so a correct answer echoing that memory would be wrongly zeroed`)
+    }
+  }
   return task
 }
 

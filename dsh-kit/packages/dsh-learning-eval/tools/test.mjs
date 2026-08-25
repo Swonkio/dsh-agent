@@ -95,8 +95,17 @@ ok('stddev detects spread', stddev([0, 1]) === 0.5)
   const tasks = await loadTasks(join(here, '..', 'tasks'))
   ok('starter tasks load and validate', tasks.length >= 4)
   ok('every starter task seeds memory', tasks.every(t => t.memories.length > 0))
-  ok('the supersede task forbids the stale value',
-    tasks.find(t => t.id === 'supersede-stale')?.expect.excludes?.includes('staging-west') === true)
+  // supersede-stale tests supersession by INCLUDE alone: a current answer has
+  // prod-east, a stale answer says staging-west and lacks it. It must NOT
+  // forbid staging-west, which appears in its own seeded memory.
+  const supersede = tasks.find(t => t.id === 'supersede-stale')
+  ok('the supersede task requires the current value', supersede?.expect.includes?.includes('prod-east') === true)
+  ok('the supersede task does not forbid its own memory term', !(supersede?.expect.excludes ?? []).includes('staging-west'))
+  // The self-clash guard must reject a task that forbids a term in its memory.
+  let clashCaught = false
+  try { validateTask({ id: 'clash', prompt: 'p', memories: [{ topic: 'a', summary: 'deploy to staging-west' }], expect: { includes: ['prod-east'], excludes: ['staging-west'] } }) }
+  catch { clashCaught = true }
+  ok('validateTask rejects an exclude that clashes with its own memory', clashCaught)
 }
 
 // ── the runner, driven by a fake model ──────────────────────────────────────

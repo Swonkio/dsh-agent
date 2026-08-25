@@ -1,39 +1,70 @@
 [
   {
     "id": "recall-port",
-    "note": "A bare fact the model cannot guess. If the control scores above zero, the term is too guessable — pick a rarer value.",
+    "note": "A bare fact the model cannot guess. If the control scores above zero, the term is too guessable \u2014 pick a rarer value.",
     "memories": [
-      { "topic": "Inference server", "summary": "the local inference server listens on port 7431 and is bound to loopback only" }
+      {
+        "topic": "Inference server",
+        "summary": "the local inference server listens on port 7431 and is bound to loopback only"
+      }
     ],
     "prompt": "What port does my local inference server listen on? Answer with just the number.",
-    "expect": { "includes": ["7431"] }
+    "expect": {
+      "includes": [
+        "7431"
+      ]
+    }
   },
   {
     "id": "recall-preference",
-    "note": "Preferences are the most common thing a user states once and expects to hold forever.",
+    "note": "Fix: memory contained the forbidden word 'prose', so a correct answer echoing the memory scored 0. The include term alone (diff) is enough to prove recall; drop the fragile exclude, or make it a value the RIGHT answer would never contain.",
     "memories": [
-      { "topic": "Review style", "summary": "the user wants patches reviewed as a unified diff, never as prose descriptions of the change" }
+      {
+        "topic": "Review style",
+        "summary": "the user wants patches reviewed as a unified diff, never as long paragraphs describing the change"
+      }
     ],
     "prompt": "How do I want you to present a code review to me? One short sentence.",
-    "expect": { "includes": ["diff"], "excludes": ["prose"] }
+    "expect": {
+      "includes": [
+        "diff"
+      ]
+    }
   },
   {
     "id": "supersede-stale",
-    "note": "The failure this eval exists to catch: two versions of a fact on file and the agent stating the dead one. The excluded term is the old value.",
+    "note": "Supersession test by INCLUDE alone: a current answer says prod-east; a stale answer says staging-west and lacks prod-east, so it scores 0. No exclude \u2014 forbidding staging-west would clash with the seeded memory and wrongly zero a correct answer that explains the decommission. Lesson: never forbid a term the correct answer may legitimately use.",
     "memories": [
-      { "topic": "Deploy target", "summary": "deploys used to go to the staging-west cluster" },
-      { "topic": "Deploy target current", "summary": "deploys now go to the prod-east cluster; staging-west was decommissioned and must not be used" }
+      {
+        "topic": "Deploy target",
+        "summary": "deploys used to go to the staging-west cluster"
+      },
+      {
+        "topic": "Deploy target current",
+        "summary": "deploys now go to the prod-east cluster; staging-west was decommissioned in 2026 and must never be used again"
+      }
     ],
-    "prompt": "Which cluster do my deploys go to? Name exactly one.",
-    "expect": { "includes": ["prod-east"], "excludes": ["staging-west"] }
+    "prompt": "Which cluster should I deploy to right now? Name the single correct one and nothing else.",
+    "expect": {
+      "includes": [
+        "prod-east"
+      ]
+    }
   },
   {
     "id": "recall-constraint",
-    "note": "An operational constraint whose violation is expensive — the class of memory that most justifies the loop existing.",
+    "note": "An operational constraint whose violation is expensive \u2014 the class of memory that most justifies the loop existing.",
     "memories": [
-      { "topic": "Database migrations", "summary": "migrations must never run during market hours; the writer lock stalls the order pipeline" }
+      {
+        "topic": "Database migrations",
+        "summary": "migrations must never run during market hours; the writer lock stalls the order pipeline"
+      }
     ],
     "prompt": "Is there any time I should avoid running database migrations? Answer briefly.",
-    "expect": { "includes": ["market hours"] }
+    "expect": {
+      "includes": [
+        "market hours"
+      ]
+    }
   }
 ]
