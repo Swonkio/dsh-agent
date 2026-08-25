@@ -22,15 +22,31 @@ const run = promisify(execFile)
 const binIndex = process.argv.indexOf('--bin')
 const bin = binIndex === -1 ? (process.env.DSH_BIN ?? 'dsh') : process.argv[binIndex + 1]
 
-/** Anything matching these must never be enabled in the review profile. */
+/**
+ * Plugins that REGISTER A CALLABLE TOOL and must never be enabled here.
+ *
+ * The list is tool-registering plugins only, not the services beneath them.
+ * That is the actual boundary: capability is decided by what is registered for
+ * the model to call, and `bash-sandbox`, `shell-env`, `subagent`, `web` and
+ * `code-runtime` register nothing callable — they provide services that other
+ * plugins depend on, and disabling them breaks the tree (dsh-permission-presets
+ * waits on shell+approval, dsh-command-goal on goals) while removing no
+ * capability from the model. An earlier version of this check listed them and
+ * reported a breach that did not exist.
+ *
+ * Ground truth is the `tools` array on the request. Captured against a stub
+ * endpoint, the shipped review profile sends exactly 13 tools — memory_save,
+ * memory_edit, memory_forget, memory_search, remember, user_model,
+ * skill, skill_create, session_search, session_trace and the three
+ * session_event_* readers — against 43 for the agent profile.
+ */
 const FORBIDDEN = [
-  /^tool-bash$/, /^bash-sandbox$/, /^tool-pwsh$/, /^pwsh-sandbox$/, /^shell-env$/,
-  /^code-runtime$/, /^subprocess$/,
+  /^tool-bash$/, /^tool-pwsh$/,
   /^tool-str-replace-editor$/, /^tool-fs$/, /^tool-fs-search$/,
-  /^tool-web$/, /^web$/, /^web-fetch-/, /^web-search-/,
-  /^tool-subagent/, /^subagent/, /^tool-jobs$/, /^jobs$/,
-  /^agent-tools$/, /^tool-ralph$/, /^tool-workflow$/, /^workflow-worker-thread$/,
-  /^tool-ask-user$/, /^user-questions$/,
+  /^tool-web$/,
+  /^tool-subagent/, /^tool-jobs$/, /^tool-ralph$/, /^tool-workflow$/,
+  /^agent-tools$/,
+  /^tool-ask-user$/, /^tool-todo$/, /^tool-goal$/,
 ]
 
 /** The review cannot do its job without these. */

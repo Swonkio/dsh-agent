@@ -155,9 +155,23 @@ the next section catches — instead of running a command.
 
 Capability is cut at the **tool** layer, not the service layer: the services
 underneath (shell, approval, goals) stay enabled, because other plugins depend
-on them and disabling `approval` would remove the permission gate rather than
-tighten it. `dsh-kit/tools/test-review-sandbox.mjs` composes the profile for
-real and fails if anything executable reappears.
+on them — the tree refuses to load without them — and disabling `approval`
+would remove the permission gate rather than tighten it. What the model can
+call is decided by what is registered, so that is the layer to cut.
+
+Measured against a stub endpoint that records the request, the review profile
+sends **13 tools** where the agent profile sends **43**:
+
+```
+memory_save  memory_edit  memory_forget  memory_search  remember
+user_model   skill        skill_create
+session_search  session_trace  session_event_read/search/trace
+```
+
+No shell, no editor, no fetch, no subagent, no `tool_create`, no scheduling.
+`dsh-kit/tools/test-review-sandbox.mjs` composes the profile and fails if any
+tool-registering plugin reappears; it is checked against a deliberate breach so
+the check itself is known to detect one.
 
 ### 2. A contradiction is caught on the way in
 

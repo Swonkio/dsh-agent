@@ -73,6 +73,8 @@
   disabled: true
 - id: tool-goal
   disabled: true
+- id: plan-mode
+  disabled: true
 
 # ── keep, and size for the job ──────────────────────────────────────────────
 - id: session-title-llm
