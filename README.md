@@ -18,6 +18,7 @@ It is **not a Raspberry Pi project** — it was first built on one, but everythi
 | **dsh-memory** | durable cross-session memory (`memory_save`/`_search`/`_edit`/`_forget`), a QWEN.md project-memory tool, full-text recall of past *conversations*, and opt-in **background self-review** that saves lessons after a turn |
 | **dsh-cron** | schedule agent turns (`cronjob` tool + a per-minute scheduler run from crontab); jobs can post results to Telegram |
 | **dsh-soul** | a `SOUL.md` persona injected into every session — who the *agent* is |
+| **dsh-agent-ui** | dsh-agent's own terminal identity — the *awakening* boot that draws the agent's memory as a synaptic constellation, and a living HUD of the learning loop (memory, skills-by-outcome, contradictions, review/curation). Warm amber, zero dependencies, silent on any scripted invocation |
 | **dsh-epistemics** | truth maintenance for memory: catches a new fact that **contradicts** one already on file (polarity, antonym, quantity), and records provenance — how you knew, when, and how many times it has been confirmed |
 | **dsh-curator** | **outcome-aware** curation: records whether the turn that loaded a skill actually succeeded, then flags failing skills for revision, retires unused ones (archive, never delete), and reports stale or contradictory memories |
 | **dsh-learning-eval** | an A/B harness that measures whether the loop actually helps — same tasks with memory on and off, deterministic scoring, and a control that refuses to credit memory for answers the model already knew |
@@ -257,3 +258,78 @@ DSH_HOME=~/.dsh-agent node dsh-kit/tools/test-review-sandbox.mjs
 
 It composes the `review` profile for real and fails if anything that can
 execute, write, fetch or delegate has reappeared.
+
+
+## The UI: the awakening
+
+The interactive dsh is ice-blue glass; dsh-agent is deliberately the opposite —
+warm amber and gold, an agent that *remembers*. Launch it at a fresh prompt and
+it does something no other terminal agent does, because no other one has a
+persistent mind to show: it draws what it remembers as a **synaptic
+constellation** — one star per memory, a beam between memories that share
+distinctive words — and the wordmark condenses out of the centre. It is Hermes's
+desktop "learning graph" rendered as a two-second star-field in the terminal,
+from the real `MEMORY.md` and nothing invented.
+
+```
+                              ⣀⣀⡠⠤
+                     ⣀⣀⠤⠤⠔⠒⠒⠉⠉
+                 ⠒⠊⠉⠉                      ⠁
+
+
+              ⠐          ❯⟨⟩ dsh·agent                 ⠁
+                         ⣀⣀⣀⣀⠤⠤⠤⠤⠔⠒⠒⢒⡪⠝⠋⠁
+              ⠤⠤⠔⠒⠒⠒⠊⠉⠉⠉⠉        ⣀⠤⠒⠁
+                               ⠐⠉
+                                               ⠂
+```
+
+Then it settles into a living HUD of the learning loop — the one dashboard
+nothing else surfaces:
+
+```
+  ❯⟨⟩ dsh·agent   the agent that remembers
+
+  ╭─ memory ─────────────────────────────────────────────────────────────────╮
+  │ entries                                          47  ·  47 topic files   │
+  │ index budget                               ██████████████········  63%   │
+  │ last learned                                                    4m ago   │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+  ╭─ skills ─────────────────────────────────────────────────────────────────╮
+  │ active                           9   ·   2 going idle   ·   3 archived   │
+  │ failing when used                            1  ⚠ revise, don't retire   │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+  ╭─ integrity ──────────────────────────────────────────────────────────────╮
+  │ memory integrity                                            consistent   │
+  │ user model                                          present  ·  4m ago   │
+  │ soul                                                            loaded   │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+  ╭─ learning loop ──────────────────────────────────────────────────────────╮
+  │ self-review                                                     6m ago   │
+  │ curation                                                        2h ago   │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+```
+
+Only failing skills and standing contradictions are drawn in the warning
+colour, because they are the only things that ask for a human.
+
+### Honesty rules the UI keeps
+
+- **It draws the real graph.** An empty memory shows a single forming spark, not
+  fake stars — the picture never lies about how much is known.
+- **It never blocks the agent.** The boot is skippable (any key), self-limiting
+  (a hard frame budget), and best-effort: if any of it throws, the agent still
+  starts.
+- **It is silent on every scripted path.** A `-p` one-shot, a pipe, `--json`,
+  `--dump-config` — all get zero bytes of chrome, so automation and the eval
+  never see an escape code. (`wantsChrome` is unit-tested for exactly this.)
+
+```sh
+dsh-agent-ui status    # the HUD (default)
+dsh-agent-ui wake      # play the awakening, then the HUD
+dsh-agent-ui theme     # a palette swatch to check a terminal
+dsh-agent-ui banner    # the wordmark line, for a prompt or motd
+```
+
+It degrades by terminal: 24-bit truecolor where advertised, xterm-256 otherwise,
+and legible monochrome under `NO_COLOR` or a dumb terminal — never escape soup.

@@ -1,0 +1,17 @@
+{
+  "name": "dsh-agent-ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dsh-agent's own terminal identity: the awakening boot that draws the agent's memory as a synaptic constellation, and a living status HUD of the learning loop. Zero dependencies.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-agent": "bin/dsh-agent.mjs",
+    "dsh-agent-ui": "bin/dsh-agent-ui.mjs"
+  },
+  "license": "MIT"
+}
