@@ -26,51 +26,65 @@ dsh-home/   profiles (agent + cron), settings.yaml, SOUL.md, memory/, skills/,
 
 ## Restore steps
 
+> **Install into `~/.dsh-agent`, not `~/.dsh`.** `~/.dsh` is the state
+> directory of the *interactive* dsh — its own profiles, its `settings.yaml`
+> with your providers, its sessions and memory. Copying this archive over it
+> replaces all of that. The two installs share a machine but not a memory, a
+> soul, or a profile set, so dsh-agent carries its own `$DSH_HOME` and the
+> launcher in step 4 pins it.
+
 ```sh
 # 1. trees
 mkdir -p ~/dsh-kit && tar -x < dsh-kit.tar -C ~/dsh-kit       # or unpack dirs
-mkdir -p ~/.dsh && cp -r dsh-home/. ~/.dsh/
+mkdir -p ~/.dsh-agent && cp -r dsh-home/. ~/.dsh-agent/
 
 # 2. kit-wide peer resolution (harness closure symlinks; versions must match
 #    the installed harness — relink to whatever the closure has)
 mkdir -p ~/dsh-kit/node_modules/@deepseek-ai
 for p in dsh-agent dsh-cmdline dsh-home-paths dsh-llm dsh-session dsh-tools; do
-  ln -sfn ~/.dsh/profiles/node_modules/@deepseek-ai/$p ~/dsh-kit/node_modules/@deepseek-ai/$p
+  ln -sfn ~/.dsh-agent/profiles/node_modules/@deepseek-ai/$p ~/dsh-kit/node_modules/@deepseek-ai/$p
 done
-ln -sfn ~/.dsh/profiles/node_modules/commander ~/dsh-kit/node_modules/commander
-ln -sfn ~/.dsh/profiles/node_modules/diff ~/dsh-kit/node_modules/diff
+ln -sfn ~/.dsh-agent/profiles/node_modules/commander ~/dsh-kit/node_modules/commander
+ln -sfn ~/.dsh-agent/profiles/node_modules/diff ~/dsh-kit/node_modules/diff
 
-# 3. out-of-tree plugin links into the harness's flat fallback
-for p in dsh-memory dsh-cron dsh-soul dsh-user-model dsh-epistemics dsh-curator dsh-learning-eval dsh-telegram dsh-agent-tools; do
-  ln -sfn ~/dsh-kit/packages/$p ~/.dsh/profiles/node_modules/$p
+# 3. out-of-tree plugin links into the harness's flat fallback.
+#    Link EVERY package rather than an enumerated list: the profile bundles
+#    name `dsh-agent` itself, and any hand-written list goes stale the moment
+#    a package is added (which is exactly how this step broke once).
+mkdir -p ~/.dsh-agent/profiles/node_modules
+for p in $(ls ~/dsh-kit/packages); do
+  ln -sfn ~/dsh-kit/packages/$p ~/.dsh-agent/profiles/node_modules/$p
 done
 ln -sfn ~/deepseek-harness/packages/session-query/tool-session-query \
-        ~/.dsh/profiles/node_modules/@deepseek-ai/dsh-tool-session-query
+        ~/.dsh-agent/profiles/node_modules/@deepseek-ai/dsh-tool-session-query
 ln -sfn ~/deepseek-harness/packages/web/web-fetch-http \
-        ~/.dsh/profiles/node_modules/@deepseek-ai/dsh-web-fetch-http
+        ~/.dsh-agent/profiles/node_modules/@deepseek-ai/dsh-web-fetch-http
 
-# 4. launchers
-printf '#!/bin/sh\nexec node "$HOME/deepseek-harness/apps/cli/lib/bin.js" --profile agent "$@"\n' > ~/.local/bin/dsh-agent
+# 4. launchers — the launcher is what pins the separate state directory
+printf '#!/bin/sh\nexec env DSH_HOME="${DSH_HOME:-$HOME/.dsh-agent}" node "$HOME/deepseek-harness/apps/cli/lib/bin.js" --profile agent "$@"\n' > ~/.local/bin/dsh-agent
 ln -sf ~/dsh-kit/packages/dsh-cron/bin/dsh-cron.mjs ~/.local/bin/dsh-cron
 ln -sf ~/dsh-kit/packages/dsh-telegram/bin/dsh-telegram.mjs ~/.local/bin/dsh-telegram
 chmod +x ~/.local/bin/dsh-agent ~/.local/bin/dsh-cron ~/.local/bin/dsh-telegram
 
 # 5. cron environment (crontab never sources ~/.bashrc)
-mkdir -p ~/.dsh/cron
-grep '^export GLM_API_KEY=' ~/.bashrc > ~/.dsh/cron/env.sh && chmod 600 ~/.dsh/cron/env.sh
+mkdir -p ~/.dsh-agent/cron
+grep '^export GLM_API_KEY=' ~/.bashrc > ~/.dsh-agent/cron/env.sh && chmod 600 ~/.dsh-agent/cron/env.sh
 
-# 6. crontab (scheduler every minute, snapshot nightly)
+# 6. crontab — OPTIONAL, and it starts autonomous work on this machine.
+#    The first line wakes a scheduler every minute which can fire agent turns
+#    that spend tokens and write to memory unattended. Add it only when you
+#    actually want scheduled jobs running; everything else works without it.
 (crontab -l 2>/dev/null
- echo '* * * * * . $HOME/.dsh/cron/env.sh && flock -n $HOME/.dsh/cron/lock $HOME/.local/bin/dsh-cron >> $HOME/.dsh/cron/runner.log 2>&1'
- echo '17 3 * * * $HOME/.dsh/cron/snapshot.sh >> $HOME/.dsh/cron/snapshot.log 2>&1'
+ echo '* * * * * . $HOME/.dsh-agent/cron/env.sh && flock -n $HOME/.dsh-agent/cron/lock $HOME/.local/bin/dsh-cron >> $HOME/.dsh-agent/cron/runner.log 2>&1'
+ echo '17 3 * * * $HOME/.dsh-agent/cron/snapshot.sh >> $HOME/.dsh-agent/cron/snapshot.log 2>&1'
 ) | crontab -
 
 # 7. snapshot repo identity
-git -C ~/.dsh init 2>/dev/null; git -C ~/.dsh config user.name  >/dev/null || git -C ~/.dsh config user.name  dsh-agent
-git -C ~/.dsh config user.email >/dev/null || git -C ~/.dsh config user.email dsh-agent@localhost
+git -C ~/.dsh-agent init 2>/dev/null; git -C ~/.dsh-agent config user.name  >/dev/null || git -C ~/.dsh-agent config user.name  dsh-agent
+git -C ~/.dsh-agent config user.email >/dev/null || git -C ~/.dsh-agent config user.email dsh-agent@localhost
 ```
 
-Verify: `dsh-agent --dump-config` composes; `dsh-agent` opens (first run
+Verify: `dsh-agent --dump-config` composes; `node dsh-kit/tools/test-all.mjs` passes; `dsh-agent` opens (first run
 shows the setup page — Telegram pairing is per-machine, the token is NOT in
 this archive); unit suites with `node tools/test.mjs` inside each
 `dsh-kit/packages/*`.
@@ -79,9 +93,13 @@ this archive); unit suites with `node tools/test.mjs` inside each
 
 - The kit diverges from upstream Swonkio/dsh-kit (rename + all new packages);
   keep merging upstream into `main`, keep local work on `dsh-agent-local`.
-- The local model (settings.yaml `local` provider) is opt-in via `/model`; hosted glm-5.3 is
-  the default. Vision is `glm-4.6v` (there is no 5v; used only for images,
-  5.3 stays the task model). ASR/TTS/search are NOT on the coding plan —
-  voice transcribes locally with whisper.
-- Never `git clean` in the kit; the bundle dir `~/.dsh/backups` holds nightly
+- The LOCAL model is the default (`settings.yaml` → `agent-default-model`:
+  `local` / `qwen3.8-27b-uncensored`), including the background review and
+  scheduled jobs, so the learning loop costs nothing and sends nothing off the
+  machine. Hosted providers stay available via `/model`. ASR/TTS/search are NOT
+  on the z.ai coding plan — voice transcribes locally with whisper.
+- The background review runs in the sandboxed `review` profile (no shell, no
+  fetch, no file writes, no subagents, no tool creation). Verify with
+  `DSH_HOME=~/.dsh-agent node dsh-kit/tools/test-review-sandbox.mjs`.
+- Never `git clean` in the kit; the bundle dir `~/.dsh-agent/backups` holds nightly
   restorable bundles on the source machine.
