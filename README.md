@@ -2,8 +2,6 @@
 
 A **persistent, self-hosted AI agent** built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). It runs against any OpenAI-compatible model endpoint — a **local** llama.cpp / llama-swap / vLLM / ollama server by default, with hosted providers reachable at runtime — and adds durable memory, self-learning, scheduled jobs, a Telegram gateway, a persona, and the ability to write its own tools.
 
-It is **not a Raspberry Pi project** — it was first built on one, but everything here runs on any Linux (or macOS) host with Node and a model endpoint. The default model is **local**, so nothing leaves the machine unless you choose a hosted model.
-
 > This is a plugin bundle for DeepSeek Harness, not a standalone program: the harness hosts it, and a model endpoint answers it. Both are separate installs — see **Setup**.
 
 ---
@@ -270,19 +268,6 @@ constellation** — one star per memory, a beam between memories that share
 distinctive words — and the wordmark condenses out of the centre. It is Hermes's
 desktop "learning graph" rendered as a two-second star-field in the terminal,
 from the real `MEMORY.md` and nothing invented.
-
-```
-                              ⣀⣀⡠⠤
-                     ⣀⣀⠤⠤⠔⠒⠒⠉⠉
-                 ⠒⠊⠉⠉                      ⠁
-
-
-              ⠐          ❯⟨⟩ dsh·agent                 ⠁
-                         ⣀⣀⣀⣀⠤⠤⠤⠤⠔⠒⠒⢒⡪⠝⠋⠁
-              ⠤⠤⠔⠒⠒⠒⠊⠉⠉⠉⠉        ⣀⠤⠒⠁
-                               ⠐⠉
-                                               ⠂
-```
 
 Then it settles into a living HUD of the learning loop — the one dashboard
 nothing else surfaces:
