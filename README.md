@@ -93,7 +93,7 @@ The review profile is the sandbox: no shell, no file mutation, no network, no su
 ## Prerequisites
 
 1. **Node 22.19+ or 24+**
-2. **A built deepseek-harness checkout** (MIT). Clone it and follow its own build steps: `pnpm install && pnpm run build`.
+2. **A built deepseek-harness checkout** (MIT). Clone it and follow its own build steps: `pnpm install && pnpm run build`. The kit carries one small harness patch ([`harness/secure-context-uuid.patch`](harness/secure-context-uuid.patch) — `crypto.randomUUID` is `[SecureContext]`-gated, which breaks the harness's web UI on plain-HTTP LAN origins). Installers apply it automatically: `DSH_BUILD=1` clones, patches, then builds; `install.sh` patches an existing checkout and tells you to rebuild. The terminal surface runs fine without it.
 3. **An OpenAI-compatible endpoint.** Anything that speaks `/v1/chat/completions` — llama.cpp's `llama-server`, llama-swap, vLLM, ollama, or a hosted API.
 
 ## Install

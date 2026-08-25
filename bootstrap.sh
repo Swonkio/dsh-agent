@@ -32,6 +32,19 @@ NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]')
 
 say "dsh kit — installing from $REPO@$REF"
 
+# ── the kit (downloaded first: it carries the harness patches) ──────────────
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+say "downloading kit"
+curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" | tar xz -C "$TMP"
+KIT=$(find "$TMP" -maxdepth 2 -name install.sh -print -quit)
+[ -n "$KIT" ] || die "could not find install.sh in the downloaded archive"
+KIT=$(dirname "$KIT")
+
+mkdir -p "$PREFIX"
+rm -rf "$PREFIX/kit"
+cp -r "$KIT" "$PREFIX/kit"
+
 # ── the harness ─────────────────────────────────────────────────────────────
 HARNESS=${DSH_HARNESS:-}
 if [ -z "$HARNESS" ]; then
@@ -43,8 +56,16 @@ if [ -z "$HARNESS" ]; then
   if [ "${DSH_BUILD:-0}" = "1" ]; then
     need pnpm
     say "cloning deepseek-harness (this is large, and the build takes a while)"
-    mkdir -p "$PREFIX"
     [ -d "$PREFIX/deepseek-harness" ] || git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness "$PREFIX/deepseek-harness"
+    # Local harness patches ride in the kit: harness/*.patch, applied to a
+    # fresh clone BEFORE the build so the built output carries them.
+    for patch in "$PREFIX/kit"/harness/*.patch; do
+      [ -e "$patch" ] || continue
+      if ( cd "$PREFIX/deepseek-harness" && git apply --check "$patch" 2>/dev/null ); then
+        ( cd "$PREFIX/deepseek-harness" && git apply "$patch" )
+        say "applied harness patch: $(basename "$patch")"
+      fi
+    done
     ( cd "$PREFIX/deepseek-harness" && pnpm install && pnpm run build )
     HARNESS=$PREFIX/deepseek-harness
   else
@@ -62,18 +83,6 @@ if [ -z "$HARNESS" ]; then
 fi
 say "harness: $HARNESS"
 
-# ── the kit ─────────────────────────────────────────────────────────────────
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-say "downloading kit"
-curl -fsSL "https://codeload.github.com/$REPO/tar.gz/$REF" | tar xz -C "$TMP"
-KIT=$(find "$TMP" -maxdepth 2 -name install.sh -print -quit)
-[ -n "$KIT" ] || die "could not find install.sh in the downloaded archive"
-KIT=$(dirname "$KIT")
-
-mkdir -p "$PREFIX"
-rm -rf "$PREFIX/kit"
-cp -r "$KIT" "$PREFIX/kit"
 DSH_HARNESS="$HARNESS" sh "$PREFIX/kit/install.sh"
 
 say ""

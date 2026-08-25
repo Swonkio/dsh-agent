@@ -1,0 +1,170 @@
+From 1edafa093ae1171112c719243e2a388e500dd527 Mon Sep 17 00:00:00 2001
+From: agent <monerofan@tuta.io>
+Date: Tue, 25 Aug 2026 16:37:45 +0000
+Subject: [PATCH] replace SecureContext-gated crypto.randomUUID with
+ getRandomValues helper
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+crypto.randomUUID is [SecureContext]-gated in browsers, so it is undefined
+on a plain-HTTP origin that is not loopback — exactly the case when the
+harness is served to a LAN address. mintRpcId and message identity then
+throw in the web client. crypto.getRandomValues carries no such gate, so
+the helper generates RFC 4122 v4 UUIDs on insecure origins and in Node.
+---
+ .../ui-conversation/src/client/random-uuid.ts | 19 +++++++++++++++++++
+ .../ui-conversation/src/client/service.ts     |  3 ++-
+ packages/host/apiproxy/src/fetch/client.ts    |  6 ++++--
+ .../host/apiproxy/src/fetch/random-uuid.ts    | 19 +++++++++++++++++++
+ packages/llm/llm/src/message.ts               |  3 ++-
+ packages/llm/llm/src/random-uuid.ts           | 19 +++++++++++++++++++
+ 6 files changed, 65 insertions(+), 4 deletions(-)
+ create mode 100644 packages/client/ui-conversation/src/client/random-uuid.ts
+ create mode 100644 packages/host/apiproxy/src/fetch/random-uuid.ts
+ create mode 100644 packages/llm/llm/src/random-uuid.ts
+
+diff --git a/packages/client/ui-conversation/src/client/random-uuid.ts b/packages/client/ui-conversation/src/client/random-uuid.ts
+new file mode 100644
+index 0000000000..d5169d0952
+--- /dev/null
++++ b/packages/client/ui-conversation/src/client/random-uuid.ts
+@@ -0,0 +1,19 @@
++/** Secure-context-independent UUID generation for browser-only draft ids. */
++
++/**
++ * Generate an RFC 4122 version 4 UUID without requiring a secure context.
++ *
++ * `crypto.randomUUID` is `[SecureContext]`-gated in browsers, so it is
++ * undefined on a plain-HTTP origin that is not loopback — exactly the case
++ * when the harness is served to a LAN address. `crypto.getRandomValues`
++ * carries no such gate.
++ * @returns a UUID backed by `crypto.getRandomValues()`, which browsers expose on insecure origins.
++ */
++export function randomUuid(): string {
++  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
++  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
++  view.setUint8(6, (view.getUint8(6) & 0x0f) | 0x40)
++  view.setUint8(8, (view.getUint8(8) & 0x3f) | 0x80)
++  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
++  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
++}
+diff --git a/packages/client/ui-conversation/src/client/service.ts b/packages/client/ui-conversation/src/client/service.ts
+index 198eee5f0f..e0fd5f6753 100644
+--- a/packages/client/ui-conversation/src/client/service.ts
++++ b/packages/client/ui-conversation/src/client/service.ts
+@@ -15,6 +15,7 @@ import type { Context } from '@deepseek-ai/cordis'
+ import type { ISessions, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+ import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
+ import type { ComposerAttachment } from './contract/slots.ts'
++import { randomUuid } from './random-uuid.ts'
+ import type { QueueAction, QueueItemId } from './contract/queue.ts'
+ import type { ComposerBlocks } from './input/blocks.ts'
+ import type { DraftAttachmentId, SessionInputResolver } from './input/contract.ts'
+@@ -62,7 +63,7 @@ export interface IConversation {
+ function browserDraftAttachment(file: File): ComposerAttachment {
+   return {
+     kind: 'image',
+-    id: crypto.randomUUID() as DraftAttachmentId,
++    id: randomUuid() as DraftAttachmentId,
+     previewUrl: URL.createObjectURL(file),
+     file,
+   }
+diff --git a/packages/host/apiproxy/src/fetch/client.ts b/packages/host/apiproxy/src/fetch/client.ts
+index 70e3ece58f..1c254d6660 100644
+--- a/packages/host/apiproxy/src/fetch/client.ts
++++ b/packages/host/apiproxy/src/fetch/client.ts
+@@ -10,6 +10,7 @@ import type { ApiProxy, HostFrame, MuxFrame } from '../api/index.ts'
+ import type { RequestPayload, ResponseValue, RpcMethodMap } from '../api/rpc-map.ts'
+ import type { ClientRequest, ClientResponse, RpcMessage, RpcReceipt, RpcRequest, RpcResponse, ServerRequest } from '../api/rpc.ts'
+ import { RpcId } from '../api/rpc.ts'
++import { randomUuid } from './random-uuid.ts'
+ import type { Wire } from '../api/rpc.schema.ts'
+ import { rpcReceiptSchema, serverRequestSchema, serverResponseSchema } from '../api/rpc.schema.ts'
+ import { hostFrameSchema, muxFrameSchema } from '../api/events.schema.ts'
+@@ -296,8 +297,9 @@ export abstract class AbstractApiClient implements IApiClient {
+   }
+ 
+   protected mintRpcId(): RpcId {
+-    // crypto.randomUUID is a Web API (browser + Node ≥19): keeps this base platform-neutral.
+-    return RpcId(crypto.randomUUID())
++    // Not crypto.randomUUID: that Web API is [SecureContext]-gated, so it is
++    // undefined in a browser on a non-loopback plain-HTTP origin (LAN serving).
++    return RpcId(randomUuid())
+   }
+ 
+   /**
+diff --git a/packages/host/apiproxy/src/fetch/random-uuid.ts b/packages/host/apiproxy/src/fetch/random-uuid.ts
+new file mode 100644
+index 0000000000..278063e0e7
+--- /dev/null
++++ b/packages/host/apiproxy/src/fetch/random-uuid.ts
+@@ -0,0 +1,19 @@
++/** Secure-context-independent UUID generation for wire correlation. */
++
++/**
++ * Generate an RFC 4122 version 4 UUID without requiring a secure context.
++ *
++ * `crypto.randomUUID` is `[SecureContext]`-gated in browsers, so it is
++ * undefined on a plain-HTTP origin that is not loopback — exactly the case
++ * when the harness is served to a LAN address. `crypto.getRandomValues`
++ * carries no such gate.
++ * @returns a UUID backed by `crypto.getRandomValues()`, which browsers expose on insecure origins.
++ */
++export function randomUuid(): string {
++  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
++  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
++  view.setUint8(6, (view.getUint8(6) & 0x0f) | 0x40)
++  view.setUint8(8, (view.getUint8(8) & 0x3f) | 0x80)
++  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
++  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
++}
+diff --git a/packages/llm/llm/src/message.ts b/packages/llm/llm/src/message.ts
+index 608b56475d..9f3746b761 100644
+--- a/packages/llm/llm/src/message.ts
++++ b/packages/llm/llm/src/message.ts
+@@ -2,6 +2,7 @@
+ 
+ import { MessageId, type CallId } from './brand.ts'
+ import { deepFreeze } from './call-config.ts'
++import { randomUuid } from './random-uuid.ts'
+ import type { ContentBlock, StreamChunk, ToolResultBlock } from './types.ts'
+ 
+ /** Provider/model identity and adapter-private replay data for an assistant message. */
+@@ -180,7 +181,7 @@ export function createMessage<T extends NewMessage>(
+ ): T & Pick<Message, 'id'> {
+   return freezeMessage({
+     ...input,
+-    id: MessageId(crypto.randomUUID()),
++    id: MessageId(randomUuid()),
+   })
+ }
+ 
+diff --git a/packages/llm/llm/src/random-uuid.ts b/packages/llm/llm/src/random-uuid.ts
+new file mode 100644
+index 0000000000..d99376a7e4
+--- /dev/null
++++ b/packages/llm/llm/src/random-uuid.ts
+@@ -0,0 +1,19 @@
++/** Secure-context-independent UUID generation for message identity. */
++
++/**
++ * Generate an RFC 4122 version 4 UUID without requiring a secure context.
++ *
++ * `crypto.randomUUID` is `[SecureContext]`-gated in browsers, so it is
++ * undefined on a plain-HTTP origin that is not loopback — exactly the case
++ * when the harness is served to a LAN address. `crypto.getRandomValues`
++ * carries no such gate.
++ * @returns a UUID backed by `crypto.getRandomValues()`, which browsers expose on insecure origins.
++ */
++export function randomUuid(): string {
++  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
++  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
++  view.setUint8(6, (view.getUint8(6) & 0x0f) | 0x40)
++  view.setUint8(8, (view.getUint8(8) & 0x3f) | 0x80)
++  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
++  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
++}
+-- 
+2.43.0
+

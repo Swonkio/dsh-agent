@@ -18,6 +18,26 @@ fi
 echo "harness: $HARNESS"
 
 KIT="$(cd "$(dirname "$0")" && pwd)"
+
+# ── local harness patches (best-effort) ─────────────────────────────────────
+# Patches ride in the kit's harness/ dir. On a fresh DSH_BUILD install the
+# bootstrap applied them BEFORE the build. For an existing harness we apply
+# to the source here — but the built output only picks them up after a
+# rebuild, so say so. Already-patched (marker present) or diverged sources
+# are skipped quietly: the terminal surface itself does not need the patch.
+for patch in "$KIT"/harness/*.patch; do
+  [ -e "$patch" ] || continue
+  if grep -q randomUuid "$HARNESS/packages/llm/llm/src/message.ts" 2>/dev/null; then
+    : # already patched (or upstream fixed it)
+  elif ( cd "$HARNESS" && git apply --check "$patch" 2>/dev/null ); then
+    ( cd "$HARNESS" && git apply "$patch" )
+    echo "applied harness patch $(basename "$patch") — rebuild to activate: (cd $HARNESS && pnpm run build)"
+  else
+    echo "NOTE: harness patch $(basename "$patch") did not apply (diverged source?) — web UI over plain-HTTP LAN stays affected; the terminal surface is fine."
+  fi
+done
+
+
 SCOPE="$HOME/.dsh/profiles/node_modules"
 mkdir -p "$SCOPE/@deepseek-ai" "$HOME/.dsh/profiles/agent"
 
