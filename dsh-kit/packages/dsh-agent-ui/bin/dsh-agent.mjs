@@ -48,7 +48,16 @@ async function showChrome() {
 function exec() {
   const child = spawn(process.execPath, [harness, '--profile', 'agent', ...args], {
     stdio: 'inherit',
-    env: { ...process.env, DSH_HOME: home },
+    env: {
+      ...process.env,
+      DSH_HOME: home,
+      // The local llama.cpp/llama-swap endpoint ignores the Authorization
+      // header (verified: any bearer value returns 200), but the provider still
+      // requires SOME credential to be present. Supply a default only when the
+      // user has not set one, so a loopback agent runs with zero credential
+      // setup while anyone pointing `local` at a real endpoint keeps their key.
+      LOCAL_API_KEY: process.env.LOCAL_API_KEY ?? 'local',
+    },
   })
   child.on('exit', code => process.exit(code ?? 0))
   child.on('error', err => { process.stderr.write(`dsh-agent: cannot start harness at ${harness}: ${err.message}\n`); process.exit(127) })

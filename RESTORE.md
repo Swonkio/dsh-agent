@@ -73,7 +73,7 @@ ln -sfn ~/deepseek-harness/packages/web/web-fetch-http \
 #     and remove the web-fetch-readable insert; no external deps are then needed.
 
 # 4. launchers — the launcher is what pins the separate state directory
-printf '#!/bin/sh\nexec env DSH_HOME="${DSH_HOME:-$HOME/.dsh-agent}" DSH_HARNESS_BIN="${DSH_HARNESS_BIN:-$HOME/deepseek-harness/apps/cli/lib/bin.js}" node "$HOME/dsh-kit/packages/dsh-agent-ui/bin/dsh-agent.mjs" "$@"\n' > ~/.local/bin/dsh-agent
+printf '#!/bin/sh\nexec env DSH_HOME="${DSH_HOME:-$HOME/.dsh-agent}" DSH_HARNESS_BIN="${DSH_HARNESS_BIN:-$HOME/deepseek-harness/apps/cli/lib/bin.js}" LOCAL_API_KEY="${LOCAL_API_KEY:-local}" node "$HOME/dsh-kit/packages/dsh-agent-ui/bin/dsh-agent.mjs" "$@"\n' > ~/.local/bin/dsh-agent
 ln -sf ~/dsh-kit/packages/dsh-cron/bin/dsh-cron.mjs ~/.local/bin/dsh-cron
 ln -sf ~/dsh-kit/packages/dsh-telegram/bin/dsh-telegram.mjs ~/.local/bin/dsh-telegram
 chmod +x ~/.local/bin/dsh-agent ~/.local/bin/dsh-cron ~/.local/bin/dsh-telegram
@@ -105,6 +105,11 @@ this archive); unit suites with `node tools/test.mjs` inside each
 
 - The kit diverges from upstream Swonkio/dsh-kit (rename + all new packages);
   keep merging upstream into `main`, keep local work on `dsh-agent-local`.
+- The `local` provider points at loopback llama-swap, which ignores the
+  Authorization header — but the provider layer still requires a credential to
+  be present. The launcher defaults `LOCAL_API_KEY=local` when unset, so the
+  agent runs with no credential setup; export a real value only if you point
+  `local` at an endpoint that actually authenticates.
 - The LOCAL model is the default (`settings.yaml` → `agent-default-model`:
   `local` / `qwen3.8-27b-uncensored`), including the background review and
   scheduled jobs, so the learning loop costs nothing and sends nothing off the
