@@ -158,9 +158,9 @@ ok('empty name attributes nothing', skillNameFrom('{"name":"  "}') === null)
   await mkdir(join(memory, 'topics'), { recursive: true })
   await writeFile(join(memory, 'MEMORY.md'),
     '# Memory index\n\n'
-    + '- Solana node: the node runs jito-solana, required for the no-port-check flag behind NAT\n'
-    + '- Node binary: the node runs stock agave, not jito-solana\n'
-    + '- Cooling: the accounts drive overheats without the GPU fans at 100 percent\n')
+    + '- Api gateway: the api gateway runs envoy, required for the grpc-web filter behind the load balancer\n'
+    + '- Gateway binary: the api gateway runs stock nginx, not envoy\n'
+    + '- Prune job: the build cache fills the disk without the nightly prune job\n')
   await writeFile(join(memory, 'topics', 'old-fact.md'),
     '---\nrecorded: 2024-01-01T00:00:00Z\nconfirmed: 2024-01-01T00:00:00Z\nconfirmations: 0\nconfidence: reported\n---\n# old\n')
   await writeFile(join(memory, 'topics', 'fresh-fact.md'),
@@ -168,8 +168,8 @@ ok('empty name attributes nothing', skillNameFrom('{"name":"  "}') === null)
 
   const scan = await scanMemory(memory, { now: NOW })
   ok('scan finds the standing contradiction', scan.conflicts.length === 1)
-  ok('it names both sides', scan.conflicts[0].a.includes('jito') && scan.conflicts[0].b.includes('agave'))
-  ok('unrelated memory is not flagged', !JSON.stringify(scan.conflicts).includes('Cooling'))
+  ok('it names both sides', scan.conflicts[0].a.includes('envoy') && scan.conflicts[0].b.includes('nginx'))
+  ok('unrelated memory is not flagged', !JSON.stringify(scan.conflicts).includes('Prune job'))
   const stale = scan.staleMemories.map(m => m.topic)
   ok('an ancient unconfirmed fact is stale', stale.includes('old-fact'))
   ok('a fresh confirmed fact is not', !stale.includes('fresh-fact'))

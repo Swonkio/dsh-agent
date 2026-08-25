@@ -29,9 +29,9 @@ ok('quantities ignores bare words', !quantities('uses quant').has('uses'))
 ok('antonym: enabled vs disabled',
   conflicts('MTP speculative decoding is enabled on the server', 'MTP speculative decoding is disabled on the server'))
 ok('antonym: works vs broken',
-  conflicts('manual port forwarding works on the TP-Link router', 'manual port forwarding is broken on the TP-Link router'))
+  conflicts('manual route config works on the edge proxy', 'manual route config is broken on the edge proxy'))
 ok('polarity: negation on one side only',
-  conflicts('the solana node requires the no-port-check flag', 'the solana node does not require the no-port-check flag'))
+  conflicts('the api gateway requires the grpc-web filter', 'the api gateway does not require the grpc-web filter'))
 ok('quantity: different ports, same subject',
   conflicts('llama-swap listens on port 8080', 'llama-swap listens on port 8081'))
 ok('quantity: different quants, same subject',
@@ -39,11 +39,11 @@ ok('quantity: different quants, same subject',
 
 // ── the subject gate must suppress unrelated lines ──────────────────────────
 ok('different subjects do not conflict despite an antonym',
-  !conflicts('the router UPnP is enabled', 'the GPU fan service is disabled'))
+  !conflicts('the proxy autodiscovery is enabled', 'the nightly prune service is disabled'))
 ok('different subjects do not conflict despite negation',
-  !conflicts('the bot must never use a public RPC', 'the accounts drive does not overheat'))
+  !conflicts('the client must never use a public relay', 'the build cache does not fill the disk'))
 ok('unrelated lines score zero',
-  conflictScore('memblaze cooling is load-bearing', 'nitro reads ethereum blobs').score === 0)
+  conflictScore('the prune schedule is load-bearing', 'the indexer reads upstream archives').score === 0)
 
 // ── agreement must not read as conflict ─────────────────────────────────────
 ok('the same fact restated does not conflict',
@@ -51,21 +51,21 @@ ok('the same fact restated does not conflict',
 ok('a superset of quantities does not conflict',
   !conflicts('llama-swap listens on port 8080', 'llama-swap listens on port 8080 and 9090'))
 ok('an elaboration does not conflict',
-  !conflicts('the node runs jito-solana', 'the node runs jito-solana for the no-port-check flag'))
+  !conflicts('the api gateway runs envoy', 'the api gateway runs envoy for the no-port-check flag'))
 
 // ── reporting ───────────────────────────────────────────────────────────────
 {
   const lines = [
-    '- Router: manual port forwarding is broken, UPnP works',
-    '- Cooling: the accounts drive overheats without fans at 100%',
-    '- Node: runs jito-solana, not stock Agave',
+    '- Proxy: manual route config is broken, autodiscovery works',
+    '- Prune job: the accounts drive overheats without fans at 100%',
+    '- Gateway: runs envoy, not stock nginx',
   ]
-  const found = findConflicts('- Router: manual port forwarding works fine now', lines)
-  ok('findConflicts locates the right line', found.length >= 1 && found[0].line.includes('Router'))
+  const found = findConflicts('- Proxy: manual route config works fine now', lines)
+  ok('findConflicts locates the right line', found.length >= 1 && found[0].line.includes('Proxy'))
   ok('findConflicts ranks worst first', found.every((c, i) => i === 0 || found[i - 1].score >= c.score))
-  ok('findConflicts respects limit', findConflicts('- Router: forwarding works', lines, { limit: 1 }).length <= 1)
+  ok('findConflicts respects limit', findConflicts('- Proxy: route config works', lines, { limit: 1 }).length <= 1)
   const notice = conflictNotice(found)
-  ok('notice names the conflicting line', notice.includes('Router'))
+  ok('notice names the conflicting line', notice.includes('Proxy'))
   ok('notice tells the model what to do', notice.includes('memory_edit'))
   ok('empty conflicts produce no notice', conflictNotice([]) === '')
 }

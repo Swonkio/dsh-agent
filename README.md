@@ -176,8 +176,8 @@ the check itself is known to detect one.
 ### 2. A contradiction is caught on the way in
 
 The store already refused near-duplicates. The failure it could not see was the
-opposite one: a fact similar in **subject** but opposite in **claim**. "the node
-runs jito-solana" and "the node runs stock agave" are only ~60% similar, so both
+opposite one: a fact similar in **subject** but opposite in **claim**. "the api gateway
+runs envoy" and "the api gateway runs stock nginx" are only ~60% similar, so both
 survived, and every later session was handed both.
 
 `dsh-epistemics` scores that on the write path — free and deterministic, no
