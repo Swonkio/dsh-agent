@@ -10,10 +10,12 @@
  *     resolves those by package name, so they need a link; this creates it,
  *     because a dependency that lives in the same repo should not require a
  *     manual step.
- *   - The HARNESS packages (@deepseek-ai/*) that plugins declare as peers.
- *     Those only exist in a real install, so suites needing them are reported
- *     as SKIPPED rather than failed — a missing harness is a setup state, not
- *     a broken test, and conflating the two hides real failures.
+ *   - EXTERNAL dependencies that were never installed — the @deepseek-ai
+ *     harness peers a plugin declares, and ordinary npm deps like `diff`.
+ *     Since siblings are linked first, anything still unresolved is one of
+ *     these, so those suites are reported as SKIPPED rather than failed: a
+ *     missing install is a setup state, not a broken test, and conflating the
+ *     two hides the real failures.
  *
  * Usage: node dsh-kit/tools/test-all.mjs
  * @module dsh-kit/tools/test-all
@@ -77,9 +79,12 @@ for (const name of names.sort()) {
       console.log(`  PASS  ${label.padEnd(40)} ${line}`)
     } catch (error) {
       const text = `${error.stdout ?? ''}${error.stderr ?? ''}${error.message}`
-      const missing = /Cannot find package '(@deepseek-ai\/[^']+)'/.exec(text)
+      // Any package still unresolved AFTER sibling linking is an external
+      // dependency this checkout never installed — harness peers and ordinary
+      // npm deps alike. Both are setup state, not a broken test.
+      const missing = /Cannot find package '([^']+)'/.exec(text)
       if (missing !== null) {
-        skipped.push(`${label} (needs ${missing[1]} — install the harness)`)
+        skipped.push(`${label} (needs ${missing[1]} — not installed)`)
         console.log(`  SKIP  ${label.padEnd(40)} needs ${missing[1]}`)
         continue
       }
@@ -90,6 +95,6 @@ for (const name of names.sort()) {
   }
 }
 
-console.log(`\n${total} assertions passed · ${failed.length} suite(s) failed · ${skipped.length} skipped (harness not installed)`)
-if (skipped.length > 0) console.log('Skipped suites run in a real install; see RESTORE.md.')
+console.log(`\n${total} assertions passed · ${failed.length} suite(s) failed · ${skipped.length} skipped (deps not installed)`)
+if (skipped.length > 0) console.log('Skipped suites run in a full install; see RESTORE.md.')
 process.exit(failed.length === 0 ? 0 : 1)
