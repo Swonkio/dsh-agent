@@ -18,6 +18,9 @@ It is **not a Raspberry Pi project** — it was first built on one, but everythi
 | **dsh-memory** | durable cross-session memory (`memory_save`/`_search`/`_edit`/`_forget`), a QWEN.md project-memory tool, full-text recall of past *conversations*, and opt-in **background self-review** that saves lessons after a turn |
 | **dsh-cron** | schedule agent turns (`cronjob` tool + a per-minute scheduler run from crontab); jobs can post results to Telegram |
 | **dsh-soul** | a `SOUL.md` persona injected into every session — who the *agent* is |
+| **dsh-epistemics** | truth maintenance for memory: catches a new fact that **contradicts** one already on file (polarity, antonym, quantity), and records provenance — how you knew, when, and how many times it has been confirmed |
+| **dsh-curator** | **outcome-aware** curation: records whether the turn that loaded a skill actually succeeded, then flags failing skills for revision, retires unused ones (archive, never delete), and reports stale or contradictory memories |
+| **dsh-learning-eval** | an A/B harness that measures whether the loop actually helps — same tasks with memory on and off, deterministic scoring, and a control that refuses to credit memory for answers the model already knew |
 | **dsh-user-model** | a self-revising `USER.md` — who the *user* is: expertise, preferences, working style, environment, projects. Injected into every session and **maintained by the background review**, so the agent starts each conversation already knowing you |
 | **dsh-telegram** | a Telegram gateway — chat with the agent, send images (vision) and voice notes (local transcription) |
 | **dsh-agent-tools** | the agent's own **tool factory**: `tool_create`/`tool_forget` register new schema-carrying tools from data definitions in `~/.dsh/tools`, security-scanned, never model-authored code |
@@ -131,3 +134,86 @@ This is the same shape as [Nous Research's Hermes Agent](https://github.com/nous
 ## Credits
 
 Built on [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT, © DeepSeek), extending [Swonkio/dsh-kit](https://github.com/Swonkio/dsh-kit). Article extraction uses Mozilla Readability; terminal traces use Braille cells; the boot sequence is a caustic light field rendered as ASCII.
+
+
+## The learning loop, in detail
+
+Four properties this kit holds that are worth stating plainly, because each one
+was a deliberate choice rather than an accident of implementation.
+
+### 1. The review is sandboxed
+
+The background review runs **unattended**, and its input is the last exchange —
+which may contain web pages, file contents or command output carrying injected
+instructions. So it runs in its own `review` profile that withholds shell, file
+mutation, network, subagents, scheduling and tool creation. What it keeps is the
+vocabulary of learning: `memory_save`, `user_model`, `skill_create`,
+`session_search`.
+
+An injection that reaches the review can at worst write a wrong memory — which
+the next section catches — instead of running a command.
+
+Capability is cut at the **tool** layer, not the service layer: the services
+underneath (shell, approval, goals) stay enabled, because other plugins depend
+on them and disabling `approval` would remove the permission gate rather than
+tighten it. `dsh-kit/tools/test-review-sandbox.mjs` composes the profile for
+real and fails if anything executable reappears.
+
+### 2. A contradiction is caught on the way in
+
+The store already refused near-duplicates. The failure it could not see was the
+opposite one: a fact similar in **subject** but opposite in **claim**. "the node
+runs jito-solana" and "the node runs stock agave" are only ~60% similar, so both
+survived, and every later session was handed both.
+
+`dsh-epistemics` scores that on the write path — free and deterministic, no
+model call — on three signals: **polarity** (one side negated), **antonym**
+(enabled/disabled, works/broken) and **quantity** (same subject, different port
+or quant or size), gated by whether the two lines share a distinctive term at
+all. It reports rather than blocks, so a false positive costs one sentence and a
+true positive prevents a permanent wrong belief.
+
+Provenance (`recorded`, `confirmed`, `confirmations`, `confidence`) lives in the
+topic file's frontmatter, never in the index — the index is injected into every
+prompt and would pay for those bytes on every turn forever.
+
+### 3. Curation is driven by outcomes, not by counts
+
+The easy signals are recency and use count, and they measure **attention, not
+value**: a skill invoked constantly that leaves the turn failing half the time is
+actively harmful, and a use count rewards it for being harmful more often.
+
+`dsh-curator` records, for every skill the agent loads, whether the turn that
+loaded it then succeeded. That changes what the right action is:
+
+- a skill that is merely **unused** is archived — quietly, recoverably;
+- a skill that is used and **fails** is *flagged for revision*, not retired,
+  because it is being reached for, so the intent is live and only the content is
+  wrong.
+
+Those are opposite responses, and a count-based policy cannot tell the two cases
+apart. Two invariants hold throughout: nothing is ever deleted (archive is a
+move), and a pinned entry is untouchable.
+
+### 4. The loop is measured
+
+`dsh-learning-eval` runs a task set twice — once with memory seeded, once
+without — and reports the lift.
+
+The control arm is the whole design. Measuring the treatment alone tells you the
+agent answered correctly, not that *memory* is why. And when a control already
+scores full marks, the model knew the answer anyway: that task cannot detect
+whether the loop works, so the harness names it and **excludes it from the
+headline** rather than averaging a meaningless zero into the mean.
+
+Scoring is deterministic substring matching, not an LLM judge, so a change in
+the number comes from the agent rather than from a judge drifting. Any forbidden
+term is an automatic zero — stating the stale version of a fact is not a
+partially-correct answer.
+
+```
+node dsh-kit/packages/dsh-learning-eval/tools/eval.mjs --repeats 3 --out report.md
+```
+
+Each arm gets a throwaway `$DSH_HOME`, so the eval can never read or write your
+real memory.

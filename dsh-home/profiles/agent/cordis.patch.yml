@@ -123,6 +123,16 @@
       config:
         maxBytes: 2048
 
+    # Outcome telemetry + curation. The listener records, for every skill the
+    # agent loads, whether the turn that loaded it succeeded — the evidence no
+    # other part of the loop collects. `curate` turns that into a plan.
+    - id: dsh-curator
+      name: 'dsh-curator'
+      config:
+        staleAfterDays: 45
+        archiveAfterDays: 90
+        failureRateAt: 0.4
+
     # The agent's own tool factory: definitions in ~/.dsh/tools register as
     # real schema-carrying tools at boot (tool_create/tool_forget manage
     # them). Definitions are data — quoting-escaped params, key-scrubbed

@@ -5,7 +5,15 @@
   "description": "The memory plugin for dsh: remember maintains QWEN.md project memory; memory_save/memory_search keep a durable user memory store injected into every prompt; skill_create is the write half of the skills system.",
   "type": "module",
   "main": "lib/index.js",
-  "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
   "license": "MIT",
-  "peerDependencies": { "@deepseek-ai/cordis": "*", "@deepseek-ai/dsh-tools": "*", "@deepseek-ai/dsh-home-paths": "*" }
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-home-paths": "*",
+    "dsh-epistemics": "*"
+  }
 }

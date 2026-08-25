@@ -1,0 +1,181 @@
+/**
+ * Unit checks for dsh-curator: the outcome-vs-recency policy (especially that
+ * a failing skill is flagged rather than retired), the invariants that protect
+ * pinned entries and forbid deletion, the run gate, and the memory scan.
+ *
+ * Usage: node tools/test.mjs
+ * @module dsh-curator/tools/test
+ */
+
+import {
+  emptyRecord, recordOutcome, failureRate, classify, curationPlan,
+  planIsEmpty, shouldRun, renderReport, daysSince, DEFAULTS,
+} from '../lib/policy.js'
+import { loadUsage, saveUsage, noteOutcome, archiveSkill, restoreSkill, setPinned, listSkills, scanMemory } from '../lib/store.js'
+import { skillNameFrom } from '../lib/index.js'
+import { mkdtemp, mkdir, writeFile, readFile, access } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+let passed = 0
+const failures = []
+const ok = (name, cond, detail = '') => { cond === true ? (passed += 1) : failures.push(`${name}${detail ? ' — ' + detail : ''}`) }
+const DAY = 86400000
+const NOW = Date.parse('2026-06-01T00:00:00Z')
+const daysAgo = n => new Date(NOW - n * DAY).toISOString()
+
+// ── telemetry folding ───────────────────────────────────────────────────────
+{
+  let rec = emptyRecord(daysAgo(10))
+  ok('empty record starts clean', rec.uses === 0 && rec.wins === 0 && rec.losses === 0)
+  rec = recordOutcome(rec, 'win', daysAgo(9))
+  rec = recordOutcome(rec, 'loss', daysAgo(8))
+  ok('uses counts every load', rec.uses === 2)
+  ok('wins and losses are separate', rec.wins === 1 && rec.losses === 1)
+  ok('failure rate over decided outcomes', failureRate(rec) === 0.5)
+  ok('no evidence yields null rate', failureRate(emptyRecord()) === null)
+  const undecided = recordOutcome(emptyRecord(), 'unknown')
+  ok('an undecided turn does not poison the rate', failureRate(undecided) === null)
+  ok('an undecided turn still counts as a use', undecided.uses === 1)
+  ok('firstUsed is preserved', rec.firstUsed === daysAgo(10))
+}
+
+// ── the central claim: failing ≠ unused ─────────────────────────────────────
+{
+  const failing = { ...emptyRecord(daysAgo(3)), uses: 10, wins: 3, losses: 7, lastUsed: daysAgo(1) }
+  const decision = classify(failing, { now: NOW })
+  ok('a failing skill is FLAGGED, not archived', decision.action === 'flag')
+  ok('the reason explains revise-not-retire', decision.reason.includes('revise'))
+
+  const idle = { ...emptyRecord(daysAgo(400)), uses: 5, wins: 5, losses: 0, lastUsed: daysAgo(400) }
+  ok('a long-unused skill is archived', classify(idle, { now: NOW }).action === 'archive')
+
+  const cooling = { ...emptyRecord(daysAgo(60)), uses: 5, wins: 5, losses: 0, lastUsed: daysAgo(60) }
+  ok('a recently-idle skill goes stale first', classify(cooling, { now: NOW }).action === 'stale')
+
+  const healthy = { ...emptyRecord(daysAgo(2)), uses: 20, wins: 19, losses: 1, lastUsed: daysAgo(1) }
+  ok('a working skill is kept', classify(healthy, { now: NOW }).action === 'keep')
+
+  // A high failure RATE on thin evidence is noise, not a verdict.
+  const thin = { ...emptyRecord(daysAgo(2)), uses: 2, wins: 0, losses: 2, lastUsed: daysAgo(1) }
+  ok('two failures is not enough evidence to flag', classify(thin, { now: NOW }).action === 'keep')
+
+  // Failure outranks age: a failing skill that is ALSO idle must still be
+  // flagged for revision rather than quietly archived.
+  const failingAndOld = { ...emptyRecord(daysAgo(400)), uses: 10, wins: 2, losses: 8, lastUsed: daysAgo(400) }
+  ok('failure outranks age', classify(failingAndOld, { now: NOW }).action === 'flag')
+}
+
+// ── invariants ──────────────────────────────────────────────────────────────
+{
+  const pinnedFailing = { ...emptyRecord(daysAgo(400)), uses: 10, wins: 0, losses: 10, lastUsed: daysAgo(400), pinned: true }
+  ok('pinned bypasses every heuristic', classify(pinnedFailing, { now: NOW }).action === 'keep')
+  ok('pinned says why', classify(pinnedFailing, { now: NOW }).reason.includes('pinned'))
+  const archived = { ...emptyRecord(daysAgo(400)), state: 'archived', lastUsed: daysAgo(400) }
+  ok('an archived skill is not re-archived', classify(archived, { now: NOW }).action === 'keep')
+  ok('no policy path ever returns delete',
+    ['flag', 'stale', 'archive', 'keep'].includes(classify({ ...emptyRecord(daysAgo(9999)), lastUsed: daysAgo(9999) }, { now: NOW }).action))
+}
+
+// ── plan assembly ───────────────────────────────────────────────────────────
+{
+  const skills = {
+    'broken-deploy': { ...emptyRecord(daysAgo(2)), uses: 12, wins: 4, losses: 8, lastUsed: daysAgo(1) },
+    'ancient-thing': { ...emptyRecord(daysAgo(400)), uses: 3, wins: 3, losses: 0, lastUsed: daysAgo(400) },
+    'good-thing': { ...emptyRecord(daysAgo(1)), uses: 30, wins: 29, losses: 1, lastUsed: daysAgo(1) },
+  }
+  const plan = curationPlan({ skills, staleMemories: [], conflicts: [] }, { now: NOW })
+  ok('healthy skills are absent from the plan', !plan.actions.some(a => a.name === 'good-thing'))
+  ok('failing skills rank first', plan.actions[0].name === 'broken-deploy')
+  ok('counts are reported', plan.counts.flagged === 1 && plan.counts.archive === 1)
+  ok('plan is not empty', !planIsEmpty(plan))
+  ok('an all-healthy plan is empty', planIsEmpty(curationPlan({ skills: { good: skills['good-thing'] } }, { now: NOW })))
+
+  const report = renderReport(plan, new Date(NOW))
+  ok('report names the failing skill', report.includes('broken-deploy'))
+  ok('report separates revise from retire', report.includes('revise, do not retire'))
+  ok('report is markdown', report.startsWith('# Curation report'))
+  ok('an empty plan renders a clean bill', renderReport(curationPlan({ skills: {} }), new Date(NOW)).includes('Nothing to curate'))
+}
+
+// ── the run gate ────────────────────────────────────────────────────────────
+{
+  const busy = curationPlan({ skills: { x: { ...emptyRecord(daysAgo(400)), lastUsed: daysAgo(400) } } }, { now: NOW })
+  ok('runs when idle, due, and there is work',
+    shouldRun({ lastRunMs: 0, idleMs: 60 * 60000, plan: busy, now: NOW }))
+  ok('does not run while the user is active',
+    !shouldRun({ lastRunMs: 0, idleMs: 60000, plan: busy, now: NOW }))
+  ok('does not run before the interval elapses',
+    !shouldRun({ lastRunMs: NOW - 3600000, idleMs: 60 * 60000, plan: busy, now: NOW }))
+  ok('does not spend a model call on an empty plan',
+    !shouldRun({ lastRunMs: 0, idleMs: 60 * 60000, plan: curationPlan({ skills: {} }), now: NOW }))
+  ok('daysSince handles nonsense', daysSince(undefined) === Infinity)
+}
+
+// ── attribution ─────────────────────────────────────────────────────────────
+ok('skill name parsed from arguments', skillNameFrom('{"name":"deploy-clanker"}') === 'deploy-clanker')
+ok('alternate key parsed', skillNameFrom('{"skill":"x"}') === 'x')
+ok('unparseable arguments attribute nothing', skillNameFrom('not json') === null)
+ok('empty name attributes nothing', skillNameFrom('{"name":"  "}') === null)
+
+// ── store: persistence, archive, restore ────────────────────────────────────
+{
+  const home = await mkdtemp(join(tmpdir(), 'dsh-cur-'))
+  const skills = join(home, 'skills')
+  await mkdir(join(skills, 'my-skill'), { recursive: true })
+  await writeFile(join(skills, 'my-skill', 'SKILL.md'), '# my skill\n')
+
+  ok('missing usage reads as empty', Object.keys(await loadUsage(skills)).length === 0)
+  await noteOutcome(skills, 'my-skill', 'win')
+  await noteOutcome(skills, 'my-skill', 'loss')
+  const usage = await loadUsage(skills)
+  ok('outcomes persist', usage['my-skill'].uses === 2 && usage['my-skill'].losses === 1)
+
+  await writeFile(join(skills, '.usage.json'), '{ broken json')
+  ok('corrupt telemetry reads as empty rather than throwing', Object.keys(await loadUsage(skills)).length === 0)
+  await saveUsage(skills, usage)
+
+  ok('live skills are listed', (await listSkills(skills)).includes('my-skill'))
+  const archived = await archiveSkill(skills, 'my-skill')
+  ok('archive moves, it does not delete', await access(archived.archivedTo).then(() => true).catch(() => false))
+  ok('archived skill leaves the live list', !(await listSkills(skills)).includes('my-skill'))
+  ok('archive is recorded in telemetry', (await loadUsage(skills))['my-skill'].state === 'archived')
+  ok('archived content survives intact',
+    (await readFile(join(archived.archivedTo, 'SKILL.md'), 'utf8')).includes('my skill'))
+
+  await restoreSkill(skills, 'my-skill')
+  ok('restore brings it back', (await listSkills(skills)).includes('my-skill'))
+  ok('restore clears the archived state', (await loadUsage(skills))['my-skill'].state === 'active')
+
+  await setPinned(skills, 'my-skill', true)
+  ok('pin persists', (await loadUsage(skills))['my-skill'].pinned === true)
+}
+
+// ── store: the memory scan ──────────────────────────────────────────────────
+{
+  const home = await mkdtemp(join(tmpdir(), 'dsh-scan-'))
+  const memory = join(home, 'memory')
+  await mkdir(join(memory, 'topics'), { recursive: true })
+  await writeFile(join(memory, 'MEMORY.md'),
+    '# Memory index\n\n'
+    + '- Solana node: the node runs jito-solana, required for the no-port-check flag behind NAT\n'
+    + '- Node binary: the node runs stock agave, not jito-solana\n'
+    + '- Cooling: the accounts drive overheats without the GPU fans at 100 percent\n')
+  await writeFile(join(memory, 'topics', 'old-fact.md'),
+    '---\nrecorded: 2024-01-01T00:00:00Z\nconfirmed: 2024-01-01T00:00:00Z\nconfirmations: 0\nconfidence: reported\n---\n# old\n')
+  await writeFile(join(memory, 'topics', 'fresh-fact.md'),
+    `---\nrecorded: ${daysAgo(2)}\nconfirmed: ${daysAgo(2)}\nconfirmations: 3\nconfidence: verified\n---\n# fresh\n`)
+
+  const scan = await scanMemory(memory, { now: NOW })
+  ok('scan finds the standing contradiction', scan.conflicts.length === 1)
+  ok('it names both sides', scan.conflicts[0].a.includes('jito') && scan.conflicts[0].b.includes('agave'))
+  ok('unrelated memory is not flagged', !JSON.stringify(scan.conflicts).includes('Cooling'))
+  const stale = scan.staleMemories.map(m => m.topic)
+  ok('an ancient unconfirmed fact is stale', stale.includes('old-fact'))
+  ok('a fresh confirmed fact is not', !stale.includes('fresh-fact'))
+  ok('an empty store scans cleanly',
+    (await scanMemory(join(home, 'nope'))).conflicts.length === 0)
+}
+
+if (failures.length === 0) console.log(`${passed} passed, 0 failed`)
+else { console.log(`${passed} passed, ${failures.length} failed`); for (const f of failures) console.log('  ✗', f); process.exit(1) }

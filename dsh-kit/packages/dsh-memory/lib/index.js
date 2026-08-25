@@ -21,6 +21,7 @@
 import { readFile, writeFile, access } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { conflictNotice } from 'dsh-epistemics'
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import {
   saveFact, search, indexTextSync, lastWriteMsSync, truncateForPrompt,
@@ -65,8 +66,8 @@ export function reviewPrompt(userText, assistantText, capBytes = 4096) {
   return 'You are the self-improvement review for dsh-agent. Below is one exchange from the session that just ended. '
     + 'Identify DURABLE lessons only: verified facts about the user or their machines worth keeping across sessions, '
     + 'mistakes now understood, or procedures worth repeating. For each, call memory_save (one topic, one self-contained '
-    + 'summary), skill_create for a procedure worth teaching, or tool_create for a command worth becoming a permanent '
-    + 'typed tool. Do NOT save ephemeral state, secrets, or anything obvious from context.\n'
+    + 'summary) or skill_create for a procedure worth teaching. Do NOT save ephemeral state, secrets, or anything '
+    + 'obvious from context.\n'
     + 'Also DEEPEN YOUR MODEL OF THE USER: if this exchange revealed something durable about WHO THEY ARE — '
     + 'expertise, preferences, working style, environment, or current projects — call user_model(get), fold the '
     + 'new observation into the current model (correcting anything now known to be wrong), and write it back with '
@@ -80,10 +81,10 @@ export function reviewPrompt(userText, assistantText, capBytes = 4096) {
 /**
  * Fire the detached review pass: a one-shot agent turn in its own session
  * namespace (~/.dsh/reviews) on the configured review route. The review
- * runs the cron profile, where backgroundReview is unset — no recursion.
+ * runs the sandboxed review profile, where backgroundReview is unset — no recursion.
  * Lives inside apply() to close over the resolved memory home.
  */
-async function maybeReviewOf(home, userText, assistantText, reviewProvider, reviewModel) {
+async function maybeReviewOf(home, userText, assistantText, reviewProvider, reviewModel, reviewProfile) {
   try {
     const { mkdir, writeFile, stat } = await import('node:fs/promises')
     const marker = join(home, '.last-review')
@@ -98,7 +99,7 @@ async function maybeReviewOf(home, userText, assistantText, reviewProvider, revi
     const { dshBinPath, envFileExports } = await import('../../dsh-cron/lib/jobs.js')
     const env = { ...(await envFileExports()), ...process.env }
     const child = spawn(process.execPath, [
-      dshBinPath(), '--profile', 'cron', '-p', reviewPrompt(userText, assistantText),
+      dshBinPath(), '--profile', reviewProfile, '-p', reviewPrompt(userText, assistantText),
       '--provider', reviewProvider, '--model', reviewModel,
     ], { cwd: join(dshHomePath(), 'reviews'), detached: true, stdio: 'ignore', env })
     child.unref()
@@ -163,7 +164,7 @@ function renderFile(preamble, sections) {
 /**
  * Register the tools and prompt sections.
  * @param {object} ctx - plugin context carrying `ctx.tools` and `ctx.systemPrompt`.
- * @param {object} config - `{ filename?, projectRootMarkers?, indexCapBytes?, nudgeAfterMs?, backgroundReview?, reviewProvider?, reviewModel? }`.
+ * @param {object} config - `{ filename?, projectRootMarkers?, indexCapBytes?, nudgeAfterMs?, backgroundReview?, reviewProvider?, reviewModel?, reviewProfile? }`.
  */
 export function apply(ctx, config = {}) {
   const filename = config.filename ?? 'QWEN.md'
@@ -176,6 +177,10 @@ export function apply(ctx, config = {}) {
   // before, but a local-only deployment can point it at the local model.
   const reviewProvider = config.reviewProvider ?? 'zai'
   const reviewModel = config.reviewModel ?? 'glm-5.3'
+  // The sandboxed profile the review runs in. It withholds shell, file
+  // mutation, network, subagents and tool creation, because a review reads
+  // untrusted text unattended; see profiles/review/cordis.patch.yml.
+  const reviewProfile = config.reviewProfile ?? 'review'
   const memoryHome = dshHomePath('memory')
 
   // The relevance signal for memory injection: the newest thing the human
@@ -210,7 +215,7 @@ export function apply(ctx, config = {}) {
       if (skillUsedThisTurn && event.data?.reason?.kind === 'failed') skillFailedNudge = true
       skillUsedThisTurn = false
       if (event.data?.reason?.kind === 'completed' && config.backgroundReview === true) {
-        void maybeReviewOf(memoryHome, lastUserText, lastAssistantText, reviewProvider, reviewModel)
+        void maybeReviewOf(memoryHome, lastUserText, lastAssistantText, reviewProvider, reviewModel, reviewProfile)
       }
     }
   })
@@ -306,7 +311,7 @@ export function apply(ctx, config = {}) {
       + 'which is injected into every future session in every project. One call = one topic: a short title plus a '
       + 'summary that stands alone (it is the line the model reads at prompt time), with optional detail body. '
       + 'Saving to an existing topic REPLACES it — rewrite the whole fact, not a delta. '
-      + 'Record only what you VERIFIED; a wrong durable memory is worse than none. '
+      + 'Record only what you VERIFIED; a wrong durable memory is worse than none — say how you know with `confidence`. '+ 'If the save reports a CONTRADICTION with an existing memory, resolve it instead of leaving both on file. '
       + 'Project-specific facts belong in remember (QWEN.md) instead.',
     parameters: {
       topic: {
@@ -323,6 +328,11 @@ export function apply(ctx, config = {}) {
         type: 'string',
         description: 'Optional detail (commands, caveats, history) kept in the topic file; read on demand, not injected.',
       },
+      confidence: {
+        type: 'string',
+        enum: ['verified', 'observed', 'reported'],
+        description: 'How you know. verified: you ran it or read it out of the system itself. observed: you saw it happen but did not confirm it. reported: the user or a document said so. This decides how long the fact is trusted before it is flagged for re-checking, so do not inflate it.',
+      },
     },
     output: {
       kind: 'value',
@@ -334,14 +344,32 @@ export function apply(ctx, config = {}) {
           topicPath: { type: 'string', required: true },
           status: { type: 'string', enum: ['recorded', 'updated', 'already known'], required: true },
           bytes: { type: 'integer', required: true },
+          confirmations: { type: 'integer' },
+          conflicts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                line: { type: 'string', required: true },
+                score: { type: 'number', required: true },
+                subject: { type: 'number' },
+                signal: { type: 'string' },
+                detail: { type: 'string' },
+              },
+            },
+          },
         },
       },
-      render: (_args, value) => [{
-        type: 'text',
-        text: value.status === 'already known'
-          ? 'Already in memory; nothing added.'
-          : `${value.status === 'updated' ? 'Updated' : 'Recorded'} memory (${value.bytes} bytes index): ${value.topicPath}`,
-      }],
+      render: (_args, value) => {
+        if (value.status === 'already known') return [{ type: 'text', text: 'Already in memory; nothing added.' }]
+        const head = `${value.status === 'updated' ? 'Updated' : 'Recorded'} memory (${value.bytes} bytes index): ${value.topicPath}`
+        // A contradiction is reported, never silently swallowed: the write has
+        // already happened, and leaving the model unaware of the clash is how
+        // two incompatible facts end up in every future prompt.
+        const notice = conflictNotice(value.conflicts ?? [])
+        return [{ type: 'text', text: notice === '' ? head : `${head}\n\n${notice}` }]
+      },
     },
     async execute(args) {
       return saveFact(memoryHome, args)

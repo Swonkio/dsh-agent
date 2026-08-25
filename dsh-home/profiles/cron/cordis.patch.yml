@@ -85,6 +85,16 @@
       config:
         maxBytes: 2048
 
+    # Outcome telemetry + curation. The listener records, for every skill the
+    # agent loads, whether the turn that loaded it succeeded — the evidence no
+    # other part of the loop collects. `curate` turns that into a plan.
+    - id: dsh-curator
+      name: 'dsh-curator'
+      config:
+        staleAfterDays: 45
+        archiveAfterDays: 90
+        failureRateAt: 0.4
+
     # Same tool factory as the agent profile: fired jobs can create and use
     # the agent-built tools too.
     - id: agent-tools

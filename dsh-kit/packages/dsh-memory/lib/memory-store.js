@@ -16,6 +16,7 @@
  */
 
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { findConflicts, parseFrontmatter, renderFrontmatter, recordProvenance } from 'dsh-epistemics'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -277,7 +278,7 @@ export async function lastWriteMs(home) {
  * @param {{ topic: string, summary: string, body?: string }} fact
  * @returns {{ indexPath: string, topicPath: string, status: 'recorded'|'updated'|'already known', bytes: number }}
  */
-export async function saveFact(home, { topic, summary, body }) {
+export async function saveFact(home, { topic, summary, body, confidence }) {
   const title = topic.trim().replace(/\s+/g, ' ')
   const line = `- ${title}: ${summary.trim().replace(/\s+/g, ' ')}`
   if (title === '' || summary.trim() === '') throw new Error('topic and summary must not be empty')
@@ -313,11 +314,34 @@ export async function saveFact(home, { topic, summary, body }) {
   const detail = body === undefined || body.trim() === '' ? '' : `${body.trim()}\n`
   if (Buffer.byteLength(detail) > MAX_TOPIC_BYTES) throw new Error(`topic body exceeds ${MAX_TOPIC_BYTES} bytes`)
 
+  // Contradiction check, against every line EXCEPT the one being replaced —
+  // rewriting a topic is how a fact gets corrected, so its own previous
+  // wording must never count as a conflict with itself.
+  const others = existing === -1 ? lines : lines.filter((_, index) => index !== existing)
+  const conflicts = findConflicts(line, others)
+
+  const topicPath = join(home, 'topics', `${slug}.md`)
   await mkdir(join(home, 'topics'), { recursive: true })
-  if (detail !== '') await writeFile(join(home, 'topics', `${slug}.md`), `# ${title}\n\n${detail}`)
+
+  // Provenance rides in the topic file's frontmatter, never in the index —
+  // the index is injected into every prompt and pays for its bytes forever.
+  let previousMeta = {}
+  try {
+    previousMeta = parseFrontmatter(await readFile(topicPath, 'utf8')).meta
+  } catch { /* first time this topic is written */ }
+  const meta = recordProvenance(previousMeta, { confidence })
+  await writeFile(topicPath, renderFrontmatter(meta, `# ${title}\n\n${detail}`))
+
   await writeFile(join(home, 'MEMORY.md'), rendered)
   await writeFile(join(home, '.last-write'), `${new Date().toISOString()}\n`)
-  return { indexPath: join(home, 'MEMORY.md'), topicPath: join(home, 'topics', `${slug}.md`), status: existing === -1 ? 'recorded' : 'updated', bytes: Buffer.byteLength(rendered) }
+  return {
+    indexPath: join(home, 'MEMORY.md'),
+    topicPath,
+    status: existing === -1 ? 'recorded' : 'updated',
+    bytes: Buffer.byteLength(rendered),
+    confirmations: meta.confirmations,
+    ...(conflicts.length === 0 ? {} : { conflicts }),
+  }
 }
 
 /**
